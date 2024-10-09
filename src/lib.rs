@@ -1,154 +1,93 @@
-use rand::prelude::SliceRandom;
 use rand::Rng;
 
-pub fn halfmoons(
+/// Halfmoons: randomly samples two "half moons". Returns samples and their labels. Samples are 3D:
+/// 1 (bias) + 2d coordinates 
+pub fn halfmoons<const NSAMP: usize>(
     central_radius: f64,
     radius_variation: f64,
     dist: f64,
-    n_samp: usize,
-) -> (Vec<(f64,f64)>,Vec<(f64,f64)>) {
+) -> ([[f64; 3]; NSAMP], [i8; NSAMP]) {
     // half doughnut
-    // radius_variation: radius_variation of doughnut
+    // radius_variation: diameter of doughnut ring
     // central_radius: center radius of dounut - sampels are at rad += radius_variation/2
 
     if central_radius < radius_variation / 2.0 {
-        panic!("The radius should be at least larger than half the radius_variation");
+        panic!("The central_radius should be at least larger than half the radius_variation");
     }
 
     let mut rng = rand::thread_rng();
-    let data1: Vec<(f64, f64)> = (0..(n_samp ))
-        .map(|_| {
-            (
-                central_radius - radius_variation / 2.0 + radius_variation * rng.gen::<f64>(),
-                std::f64::consts::PI * rng.gen::<f64>(),
-            )
-        })
-        .map(|(radius, theta)| (radius * theta.cos(), radius * theta.sin()))
-        .collect();
-
-    let data2: Vec<(f64, f64)> = (0..(n_samp ))
-        .map(|_| {
-            (
-                central_radius - radius_variation / 2.0 + radius_variation * rng.gen::<f64>(),
-                std::f64::consts::PI * rng.gen::<f64>(),
-            )
-        })
-        .map(|(radius, theta)| {
-            (
-                -radius * theta.cos() + central_radius,
-                -radius * theta.sin() - dist,
-            )
-        })
-        .collect();
-    (data1,data2)
-}
-
-
-#[derive(Debug)]
-pub struct HalfMoonData {
-    pub x: Vec<f64>,
-    pub y: Vec<f64>,
-    pub label: Vec<i32>,
-}
-
-pub fn halfmoon(
-    central_radius: f64,
-    radius_variation: f64,
-    dist: f64,
-    n_samp: usize,
-) -> HalfMoonData {
-    // half doughnut
-    // radius_variation: radius_variation of doughnut
-    // central_radius: center radius of dounut - sampels are at rad += radius_variation/2
-
-    if central_radius < radius_variation / 2.0 {
-        panic!("The radius should be at least larger than half the radius_variation");
-    }
-
-    if n_samp % 2 != 0 {
-        panic!("Please make sure the number of samples is even");
-    }
-
-    let mut x = Vec::with_capacity(n_samp);
-    let mut y = Vec::with_capacity(n_samp);
-    let mut label = Vec::with_capacity(n_samp);
-    let mut rng = rand::thread_rng();
-
-    // First half-moon
-    for _ in 0..(n_samp / 2) {
-        let radius =
-            (central_radius - radius_variation / 2.0) + radius_variation * rng.gen::<f64>();
+    let mut data = [[0.0; 3]; NSAMP];
+    let mut labels = [0; NSAMP];
+    for i in (0..NSAMP).step_by(2) {
+        let radius = central_radius - radius_variation / 2.0 + radius_variation * rng.gen::<f64>();
         let theta = std::f64::consts::PI * rng.gen::<f64>();
-        x.push(radius * theta.cos());
-        y.push(radius * theta.sin());
-        label.push(1);
-    }
+        data[i] = [1.0, radius * theta.cos(), radius * theta.sin()];
+        labels[i] = 1;
 
-    // Second half-moon (mirrored)
-    for _ in 0..(n_samp / 2) {
-        let radius =
-            (central_radius - radius_variation / 2.0) + radius_variation * rng.gen::<f64>();
+        let radius = central_radius - radius_variation / 2.0 + radius_variation * rng.gen::<f64>();
         let theta = std::f64::consts::PI * rng.gen::<f64>();
-        x.push(radius * (-theta.cos()) + central_radius);
-        y.push(radius * (-theta.sin()) - dist);
-        label.push(-1);
+        data[i + 1] = [
+            1.0,
+            -radius * theta.cos() + central_radius,
+            -radius * theta.sin() - dist,
+        ];
+        labels[i + 1] = -1;
     }
 
-    // Shuffle data
-    let mut indices: Vec<usize> = (0..n_samp).collect();
-    indices.shuffle(&mut rng);
-    let shuffled_x: Vec<f64> = indices.iter().map(|&i| x[i]).collect();
-    let shuffled_y: Vec<f64> = indices.iter().map(|&i| y[i]).collect();
-    let shuffled_label: Vec<i32> = indices.iter().map(|&i| label[i]).collect();
+    (data, labels)
+}
 
-    HalfMoonData {
-        x: shuffled_x,
-        y: shuffled_y,
-        label: shuffled_label,
+pub struct Perceptron<const N: usize> {
+    pub weights: [f64; N],
+}
+
+impl<const N: usize> Perceptron<N> {
+    pub fn new() -> Self {
+        Self {
+            weights: [0.0; N], // including bias
+        }
+    }
+
+    pub fn train(&mut self, data: &[[f64; N]], labels: &[i8]) -> f64 {
+        assert_eq!(data.len(), labels.len());
+
+        let mut ee = 0.0;
+        for (x, &d) in data.iter().zip(labels.iter()) {
+            let y = sign(
+                self.weights
+                    .iter()
+                    .zip(x.iter())
+                    .map(|(wi, xi)| wi * xi)
+                    .sum::<f64>(),
+            );
+            let error = (d - y) as f64;
+            for (wj, xj) in self.weights.iter_mut().zip(x.iter()) {
+                let lr = 1.0; // Optionally impl annealing, e.g. linear decay
+                *wj += lr * error * xj;
+            }
+            ee += error * error;
+        }
+        ee /= data.len() as f64;
+        ee
+    }
+
+    pub fn classify(&self, x: &[f64]) -> i8 {
+        sign(
+            self.weights
+                .iter()
+                .zip(x.iter())
+                .map(|(wi, xi)| wi * xi)
+                .sum::<f64>(),
+        )
     }
 }
 
-pub fn sign(value: f64) -> i32 {
+pub fn sign(value: f64) -> i8 {
     if value >= 0.0 {
         1
     } else {
         -1
     }
-}
-
-pub fn perceptron_train(
-    data: &HalfMoonData,
-    num_tr: usize,
-    num_epochs: usize,
-) -> Vec<f64> {
-    let mut w = vec![0.0; 3]; // Initial weights, including bias
-
-    for _epoch in 0..num_epochs {
-        for i in 0..num_tr {
-            let x = vec![1.0, data.x[i], data.y[i]]; // Input with bias
-            let d = data.label[i]; // Desired output
-            let y = sign(w.iter().zip(&x).map(|(wi, xi)| wi * xi).sum::<f64>());
-            let error = (d - y) as f64;
-            for j in 0..w.len() {
-                let lr = 1.0; // Optional - impl annealing, e.g. linear decay
-                w[j] +=  lr*error * x[j];
-            }
-        }
-    }
-    w
-}
-
-pub fn perceptron_test(data: &HalfMoonData, w: &[f64], num_te: usize, num_tr: usize) -> f64 {
-    let mut errors = 0;
-    for i in 0..num_te {
-        let idx = num_tr + i;
-        let x = vec![1.0, data.x[idx], data.y[idx]]; // Input with bias
-        let y = sign(w.iter().zip(&x).map(|(wi, xi)| wi * xi).sum::<f64>());
-        if y != data.label[idx] {
-            errors += 1;
-        }
-    }
-    errors as f64 / num_te as f64 * 100.0 // Return error rate in percentage
 }
 
 pub fn add(left: u64, right: u64) -> u64 {
