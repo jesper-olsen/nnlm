@@ -20,7 +20,7 @@ fn plot(data: &[[f64; 3]], model: &Perceptron<3>, title: &str) {
     let mut grid_class = Vec::new();
 
     // Grid points - different colours and different sides of decision boundary
-    let step_size = 0.2; // grid density 
+    let step_size = 0.2; // grid density
     let mut x = xmin;
     while x <= xmax {
         let mut y = ymin;
@@ -72,11 +72,11 @@ fn plot(data: &[[f64; 3]], model: &Perceptron<3>, title: &str) {
     fg.show().unwrap();
 }
 
-fn plot_mse(mse: &[f64]) {
+fn plot_mse(mse: &[f64], title: &str) {
     let epochs: Vec<i32> = (0..mse.len()).map(|i| i as i32).collect();
     let mut fg = Figure::new();
     fg.axes2d()
-        .set_title("Learning Curve", &[])
+        .set_title(title, &[])
         .set_x_label("Epoch", &[])
         .set_y_label("MSE", &[])
         .lines(
@@ -88,7 +88,7 @@ fn plot_mse(mse: &[f64]) {
 }
 
 fn main() {
-    for dist in [-4.0, 0.0, 4.0] {
+    for dist in [-4.0, 1.0, 0.0, 4.0] {
         const NEPOCHS: usize = 50;
         let central_radius = 10.0;
         let radius_variation = 6.0;
@@ -98,7 +98,9 @@ fn main() {
         let te_data = &data[1000..];
         let te_labels = &labels[1000..];
         let mut model = Perceptron::<3>::new();
-        let mse: Vec<f64> = (0..NEPOCHS).map(|_| model.train(tr_data, tr_labels)).collect();
+        let mse: Vec<f64> = (0..NEPOCHS)
+            .map(|_| model.train(tr_data, tr_labels))
+            .collect();
         let correct: usize = te_data
             .iter()
             .zip(te_labels.iter())
@@ -106,11 +108,12 @@ fn main() {
             .filter(|f| *f)
             .count();
 
-        println!("{mse:?}");
-        println!("Correct: {correct}/{}", te_data.len());
-        plot_mse(&mse);
-        let error = 100.0 * (te_data.len()-correct) as f64 / te_data.len() as f64;
-        let title = format!("Perceptron Classification with Half-Moon Data - dist {dist}; Error: {error:.1}%");
+        let title = format!("Learning curve - dist: {dist};");
+        plot_mse(&mse, &title);
+        let error = 100.0 * (te_data.len() - correct) as f64 / te_data.len() as f64;
+        let title = format!(
+            "Perceptron Classification with Half-Moon Data - dist: {dist}; Error: {error:.1}%"
+        );
         plot(&te_data, &model, &title);
     }
 }

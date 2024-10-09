@@ -1,7 +1,7 @@
 use rand::Rng;
 
 /// Halfmoons: randomly samples two "half moons". Returns samples and their labels. Samples are 3D:
-/// 1 (bias) + 2d coordinates 
+/// 1 (bias) + 2d coordinates
 pub fn halfmoons<const NSAMP: usize>(
     central_radius: f64,
     radius_variation: f64,
