@@ -109,7 +109,8 @@ fn main() {
         println!("{mse:?}");
         println!("Correct: {correct}/{}", te_data.len());
         plot_mse(&mse);
-        let title = format!("Perceptron Classification with Half-Moon Data - dist {dist}");
+        let error = 100.0 * (te_data.len()-correct) as f64 / te_data.len() as f64;
+        let title = format!("Perceptron Classification with Half-Moon Data - dist {dist}; Error: {error:.1}%");
         plot(&te_data, &model, &title);
     }
 }
