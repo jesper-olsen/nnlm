@@ -1,5 +1,5 @@
-use rand::Rng;
 use gnuplot::{AxesCommon, Color, Figure, PointSymbol};
+use rand::Rng;
 
 /// Halfmoons: randomly samples two "half moons". Returns samples and their labels. Samples are 3D:
 /// 1 (bias) + 2d coordinates
@@ -111,16 +111,32 @@ pub fn plot(data: &[[f64; 3]], weights: &[f64], title: &str) {
         while y <= ymax {
             let input = [1.0, x, y]; // input with bias
             let z: f64 = weights.iter().zip(input.iter()).map(|(w, x)| w * x).sum();
-            grid.push((x,y,z.signum() as i8));
+            grid.push((x, y, z.signum() as i8));
             y += step_size
         }
         x += step_size
     }
 
-    let pos_x: Vec<f64> = grid.iter().filter(|(_,_,z)| *z==1).map(|(x,_,_)| *x).collect();
-    let pos_y: Vec<f64> = grid.iter().filter(|(_,_,z)| *z==1).map(|(_,y,_)| *y).collect();
-    let neg_x: Vec<f64> = grid.iter().filter(|(_,_,z)| *z==-1).map(|(x,_,_)| *x).collect();
-    let neg_y: Vec<f64> = grid.iter().filter(|(_,_,z)| *z==-1).map(|(_,y,_)| *y).collect();
+    let pos_x: Vec<f64> = grid
+        .iter()
+        .filter(|(_, _, z)| *z == 1)
+        .map(|(x, _, _)| *x)
+        .collect();
+    let pos_y: Vec<f64> = grid
+        .iter()
+        .filter(|(_, _, z)| *z == 1)
+        .map(|(_, y, _)| *y)
+        .collect();
+    let neg_x: Vec<f64> = grid
+        .iter()
+        .filter(|(_, _, z)| *z == -1)
+        .map(|(x, _, _)| *x)
+        .collect();
+    let neg_y: Vec<f64> = grid
+        .iter()
+        .filter(|(_, _, z)| *z == -1)
+        .map(|(_, y, _)| *y)
+        .collect();
 
     // calcualte decision boundary
     let x_vals: Vec<f64> = (0..=100)
