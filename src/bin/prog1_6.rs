@@ -1,76 +1,5 @@
-use gnuplot::{AxesCommon, Color, Figure, PointSymbol};
+use gnuplot::{AxesCommon, Figure};
 use nnlm::*;
-
-fn plot(data: &[[f64; 3]], model: &Perceptron<3>, title: &str) {
-    let (xmin, xmax) = data
-        .iter()
-        .map(|&v| v[1])
-        .fold((f64::INFINITY, f64::NEG_INFINITY), |(min, max), val| {
-            (f64::min(min, val), f64::max(max, val))
-        });
-    let (ymin, ymax) = data
-        .iter()
-        .map(|&v| v[2])
-        .fold((f64::INFINITY, f64::NEG_INFINITY), |(min, max), val| {
-            (f64::min(min, val), f64::max(max, val))
-        });
-
-    let mut grid_x = Vec::new();
-    let mut grid_y = Vec::new();
-    let mut grid_class = Vec::new();
-
-    // Grid points - different colours and different sides of decision boundary
-    let step_size = 0.2; // grid density
-    let mut x = xmin;
-    while x <= xmax {
-        let mut y = ymin;
-        while y <= ymax {
-            let input = [1.0, x, y]; // input with bias
-            let z = model.classify(&input) as f64;
-            grid_x.push(x);
-            grid_y.push(y);
-            grid_class.push(sign(z)); // predicted class
-            y += step_size
-        }
-        x += step_size
-    }
-
-    let mut pos_x = Vec::new();
-    let mut pos_y = Vec::new();
-    let mut neg_x = Vec::new();
-    let mut neg_y = Vec::new();
-
-    for i in 0..grid_x.len() {
-        if grid_class[i] == 1 {
-            pos_x.push(grid_x[i]);
-            pos_y.push(grid_y[i]);
-        } else {
-            neg_x.push(grid_x[i]);
-            neg_y.push(grid_y[i]);
-        }
-    }
-
-    // calcualte decision boundary
-    let x_vals: Vec<f64> = (0..=100)
-        .map(|i| xmin + (xmax - xmin) * (i as f64 / 100.0))
-        .collect();
-    let y_vals: Vec<f64> = x_vals
-        .iter()
-        .map(|&x| -(model.weights[0] + model.weights[1] * x) / model.weights[2])
-        .collect();
-
-    let vx: Vec<f64> = data.iter().map(|v| v[1]).collect();
-    let vy: Vec<f64> = data.iter().map(|v| v[2]).collect();
-    // Plot using gnuplot
-    let mut fg = Figure::new();
-    fg.axes2d()
-        .set_title(title, &[])
-        .points(&vx, &vy, &[PointSymbol('O'), Color("blue")]) // Original data points
-        .points(&pos_x, &pos_y, &[PointSymbol('.'), Color("green")]) // Positive classified points
-        .points(&neg_x, &neg_y, &[PointSymbol('.'), Color("red")]) // Negative classified points
-        .lines(&x_vals, &y_vals, &[Color("black")]);
-    fg.show().unwrap();
-}
 
 fn plot_mse(mse: &[f64], title: &str) {
     let epochs: Vec<i32> = (0..mse.len()).map(|i| i as i32).collect();
@@ -93,6 +22,10 @@ fn main() {
         let central_radius = 10.0;
         let radius_variation = 6.0;
         let (data, labels) = halfmoons::<3000>(central_radius, radius_variation, dist);
+        let data: Vec<_> = data
+            .into_iter()
+            .map(|[x, y]| [1.0, x, y]) // Add 1.0 - gives the perceptron a bias term
+            .collect();
         let tr_data = &data[..1000];
         let tr_labels = &labels[..1000];
         let te_data = &data[1000..];
@@ -114,6 +47,6 @@ fn main() {
         let title = format!(
             "Perceptron Classification with Half-Moon Data - dist: {dist}; Error: {error:.1}%"
         );
-        plot(&te_data, &model, &title);
+        plot(&te_data, &model.weights, &title);
     }
 }
