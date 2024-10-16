@@ -84,6 +84,21 @@ impl<const N: usize> Perceptron<N> {
     }
 }
 
+pub fn plot_mse(mse: &[f64], title: &str) {
+    let epochs: Vec<i32> = (0..mse.len()).map(|i| i as i32).collect();
+    let mut fg = Figure::new();
+    fg.axes2d()
+        .set_title(title, &[])
+        .set_x_label("Epoch", &[])
+        .set_y_label("MSE", &[])
+        .lines(
+            &epochs,
+            mse,
+            &[gnuplot::Caption("MSE"), gnuplot::Color("black")],
+        );
+    fg.show().unwrap();
+}
+
 pub fn plot(data: &[[f64; 3]], weights: &[f64], title: &str) {
     let (xmin, xmax) = data
         .iter()
@@ -157,6 +172,17 @@ pub fn plot(data: &[[f64; 3]], weights: &[f64], title: &str) {
         .points(&pos_x, &pos_y, &[PointSymbol('.'), Color("green")]) // Positive classified points
         .points(&neg_x, &neg_y, &[PointSymbol('.'), Color("red")]) // Negative classified points
         .lines(&x_vals, &y_vals, &[Color("black")]);
+    fg.show().unwrap();
+}
+
+pub fn plot0(data: &[[f64; 2]], title: &str) {
+    let vx: Vec<f64> = data.iter().map(|v| v[0]).collect();
+    let vy: Vec<f64> = data.iter().map(|v| v[1]).collect();
+    // Plot using gnuplot
+    let mut fg = Figure::new();
+    fg.axes2d()
+        .set_title(title, &[])
+        .points(&vx, &vy, &[PointSymbol('O'), Color("blue")]); // Original data points
     fg.show().unwrap();
 }
 

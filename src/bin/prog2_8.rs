@@ -2,21 +2,6 @@ use gnuplot::{AxesCommon, Figure};
 use nalgebra::{DMatrix, DVector};
 use nnlm::*;
 
-fn plot_mse(mse: &[f64], title: &str) {
-    let epochs: Vec<i32> = (0..mse.len()).map(|i| i as i32).collect();
-    let mut fg = Figure::new();
-    fg.axes2d()
-        .set_title(title, &[])
-        .set_x_label("Epoch", &[])
-        .set_y_label("MSE", &[])
-        .lines(
-            &epochs,
-            mse,
-            &[gnuplot::Caption("MSE"), gnuplot::Color("black")],
-        );
-    fg.show().unwrap();
-}
-
 fn calc_mean(data: &[[f64; 3]]) -> Vec<f64> {
     let mean: Vec<f64> = data.iter().fold(vec![0.0; 3], |acc, x| {
         acc.iter().zip(x.iter()).map(|(a, b)| a + b).collect()

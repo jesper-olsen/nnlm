@@ -1,24 +1,33 @@
 use gnuplot::{AxesCommon, Figure};
-use nalgebra::{DMatrix, DVector};
 use nnlm::*;
 use std::fmt;
+use stmc_rs::marsaglia::Marsaglia;
+
+fn clip_gradient(grad: f64, max_grad: f64) -> f64 {
+    if grad > max_grad {
+        max_grad
+    } else if grad < -max_grad {
+        -max_grad
+    } else {
+        grad
+    }
+}
 
 #[derive(Copy, Clone)]
 struct GKernal<const IDIM: usize> {
-    pub mean: [f64; IDIM],
-    pub var: [f64; IDIM],
+    mean: [f64; IDIM],
+    var: [f64; IDIM],
 }
 
 impl<const IDIM: usize> fmt::Display for GKernal<IDIM> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "GKernal")?;
-
-        write!(f, "mean: ");
+        write!(f, "mean: ")?;
         for j in 0..IDIM {
             write!(f, "{:>8.2} ", self.mean[j])?;
         }
-        writeln!(f);
-        write!(f, "var:  ");
+        writeln!(f)?;
+        write!(f, "var:  ")?;
         for j in 0..IDIM {
             write!(f, "{:>8.2} ", self.var[j])?;
         }
@@ -37,27 +46,36 @@ impl<const IDIM: usize> GKernal<IDIM> {
 
     pub fn estimate<'a, I>(&mut self, data: I)
     where
-        I: IntoIterator<Item = &'a [f64; IDIM]>,
+        I: IntoIterator<Item = &'a [f64; IDIM]> + Clone,
     {
-
-            // Estimate mean and variance - Welford's method
-            let mut count=0;
-            self.mean.fill(0.0);
-            self.var.fill(0.0);
-            let mut old_mean = [0.0f64; IDIM];
-            for (i, item) in data.into_iter().enumerate() {
-                let v = item.as_ref();
-                count+=1;
-                old_mean.copy_from_slice(&self.mean);
-                self.mean
-                    .iter_mut()
-                    .zip(v.iter())
-                    .for_each(|(m, x)| *m += (*x - *m) / (i+1) as f64);
-                for j in 0..IDIM {
-                    self.var[j] += (v[j] - self.mean[j]) * (v[j] - old_mean[j]);
-                }
+        // Estimate mean and variance - Welford's method
+        let mut count = 0;
+        self.mean.fill(0.0);
+        self.var.fill(0.0);
+        let mut old_mean = [0.0f64; IDIM];
+        for (i, item) in data.clone().into_iter().enumerate() {
+            let v = item.as_ref();
+            count += 1;
+            old_mean.copy_from_slice(&self.mean);
+            self.mean
+                .iter_mut()
+                .zip(v.iter())
+                .for_each(|(m, x)| *m += (*x - *m) / (i + 1) as f64);
+            for j in 0..IDIM {
+                self.var[j] += (v[j] - self.mean[j]) * (v[j] - old_mean[j]);
             }
-            self.var.iter_mut().for_each(|e| *e /= (count - 1) as f64);
+        }
+        self.var.iter_mut().for_each(|e| *e /= (count - 1) as f64);
+    }
+
+    /// Squared Euclidian distance between x and the Gaussian kernel.
+    pub fn dist_euc(&self, x: &[f64]) -> f64 {
+        assert_eq!(x.len(), IDIM);
+        self.mean
+            .iter()
+            .zip(x.iter())
+            .map(|(&m, &xi)| (xi - m).powi(2))
+            .sum()
     }
 
     /// Squared Mahalanobis distance between x and the Gaussian kernel.
@@ -71,7 +89,7 @@ impl<const IDIM: usize> GKernal<IDIM> {
             .sum()
     }
 
-    /// Log probability of x 
+    /// Log probability of x
     pub fn logp(&self, x: &[f64]) -> f64 {
         assert_eq!(x.len(), IDIM);
         let s: f64 = self
@@ -82,29 +100,40 @@ impl<const IDIM: usize> GKernal<IDIM> {
         -0.5 * (self.dist(x) + s)
     }
 
-    /// Probability of x 
+    /// Probability of x
     pub fn p(&self, x: &[f64]) -> f64 {
         assert_eq!(x.len(), IDIM);
         let a: f64 = (2.0 * std::f64::consts::PI).powi(IDIM as i32);
         let vproduct = self.var.iter().fold(a, |acc, v| acc * v);
         (1.0 / vproduct.sqrt()) * (-0.5 * self.dist(x)).exp()
     }
+
+    pub fn floor_variances(&mut self, floor: f64) {
+        self.var.iter_mut().for_each(|v| *v = v.max(floor));
+    }
+
+    pub fn set_variances(&mut self, val: f64) {
+        self.var.iter_mut().for_each(|v| *v = val);
+    }
 }
 
-pub struct RBF<const IDIM: usize, const NKERNALS: usize> {
-    pub kernal: [GKernal<IDIM>; NKERNALS],
-    pub weights: [f64; NKERNALS],
+pub struct RBF<const IDIM: usize, const NKERNELS: usize> {
+    kernel: [GKernal<IDIM>; NKERNELS],
+    weights: [f64; NKERNELS],
 }
 
-impl<const IDIM: usize, const NKERNALS: usize> fmt::Display for RBF<IDIM, NKERNALS> {
+impl<const IDIM: usize, const NKERNELS: usize> fmt::Display for RBF<IDIM, NKERNELS> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "RBF")?;
 
-        for i in 0..NKERNALS {
-            for j in 0..IDIM {
-                write!(f, "{:>8.2} ", self.kernal[i])?;
-            }
-            writeln!(f)?;
+        write!(f, "Weights: ")?;
+        for j in 0..NKERNELS {
+            write!(f, "{:>8.2} ", self.weights[j])?;
+        }
+        writeln!(f)?;
+
+        for i in 0..NKERNELS {
+            write!(f, "{i}: {}", self.kernel[i])?;
         }
         Ok(())
     }
@@ -114,54 +143,112 @@ fn rbf(dist: f64) {
     let central_radius = 10.0;
     let radius_variation = 6.0;
     let (data, labels) = halfmoons::<3000>(central_radius, radius_variation, dist);
+    plot0(&data, "plot0");
     let mut model = RBF::<2, 20>::new();
-    model.kmeans(&data, 100);
+
+    const MAX_ITER: usize = 100;
+    model.train_kernels(&data[..1000], MAX_ITER);
+
+    let centers: Vec<[f64; 2]> = model
+        .kernel
+        .iter()
+        .map(|k| [k.mean[0], k.mean[1]])
+        .collect();
+    plot0(&centers, "kernel centers");
+    let mse = model.train_weights(&data[..1000], &labels[..1000], MAX_ITER);
+    let title = format!("Training RBF network for dist: {dist}");
+    plot_mse(&mse, &title);
     println!("{model}");
+    model.eval(&data[1000..], &labels[1000..]);
 }
 
-impl<const IDIM: usize, const NKERNALS: usize> RBF<IDIM, NKERNALS> {
+impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
     pub fn new() -> Self {
+        let mut rng = Marsaglia::new(12, 34, 56, 78);
+        let mut weights = [0.0f64; NKERNELS];
+        weights.iter_mut().for_each(|w| *w = 0.5 * rng.uni() - 0.25);
+        println!("weights: {weights:?}");
         Self {
-            kernal: [GKernal::new(); NKERNALS],
-            weights: [0.0; NKERNALS],
+            kernel: [GKernal::new(); NKERNELS],
+            weights,
         }
     }
 
     pub fn output(&self, x: &[f64]) -> f64 {
         assert_eq!(x.len(), IDIM, "Input length does not match expected IDIM");
-        let mut result = 0.0;
-        for i in 0..NKERNALS {
-            result += self.weights[i] * self.kernal[i].p(x);
-        }
-        result
+        self.kernel
+            .iter()
+            .zip(self.weights.iter())
+            .map(|(&k, &w)| w * k.p(x))
+            .sum::<f64>()
+            .signum()
     }
 
-    fn kmeans(&mut self, data: &[[f64; IDIM]], max_iter: usize) {
+    fn eval(&self, data: &[[f64; IDIM]], labels: &[i8]) {
+        let mut errors = 0;
+        for (x, label) in data.iter().zip(labels) {
+            let y = self.output(x) as i8;
+            let d = label.signum();
+            if d != y {
+                errors += 1
+            }
+        }
+        let errp = 100.0 * errors as f64 / data.len() as f64;
+        println!("errors: {errors}/{} ({errp:>8.2})", data.len());
+    }
 
-            let dta: Vec<&[f64;IDIM]> = data.iter()
-                           .enumerate()
-                           .filter(|(i,_)| true)
-                           .map(|(_,v)| v).collect();
+    fn train_weights(&mut self, data: &[[f64; IDIM]], labels: &[i8], max_iter: usize) -> Vec<f64> {
+        let mut lmse = Vec::<f64>::new();
+        for ep in 0..max_iter {
+            let lr = 0.1 / (1.0 + ep as f64);
+            let mut mse = 0.0;
+            for (sampn, (x, label)) in data.iter().zip(labels).enumerate() {
+                let k: Vec<f64> = self
+                    .kernel
+                    .iter()
+                    .map(|&k| k.p(x))
+                    .collect();
+                let d = *label as f64;
+                let y: f64 = k.iter().zip(self.weights.iter()).map(|(g,w)| g*w).sum::<f64>();
+                let e = d - y;
 
-        let dta: Vec<&[f64;IDIM]> = data.iter().map(|v| v).collect();
+                mse += e * e;
+                self.weights
+                    .iter_mut()
+                    .zip(k.iter())
+                    .map(|(w, ki)| (w,lr * e * ki))
+                    .for_each(|(w, grad)| *w += grad);
+                self.normalise_weights();
+            }
+            mse /= data.len() as f64;
+            lmse.push(mse);
+            println!("ep {ep} {mse}");
+            self.eval(data, labels);
+        }
+        lmse
+    }
 
-        let mut k = GKernal::<IDIM>::new(); 
-        k.estimate(data.iter().map(|v| v).collect::<Vec<_>>()); 
-        println!("trained {k}");
+    fn normalise_weights(&mut self) {
+        let nw = self.weights.iter().map(|w| w * w).sum::<f64>().sqrt();
+        if nw > 0.0 {
+            self.weights.iter_mut().for_each(|w| *w /= nw);
+        }
+    }
 
+    fn train_kernels(&mut self, data: &[[f64; IDIM]], max_iter: usize) {
         const EPSILON: f64 = 0.0;
         assert!(
-            data.len() >= NKERNALS,
+            data.len() >= NKERNELS,
             "Not enough data samples to initialize centroids."
         );
 
-        // Initialize kernals from the first NKERNALS data samples (assume randomised)
-        for (k, sample) in self.kernal.iter_mut().zip(data.iter().take(NKERNALS)) {
+        // Initialize kernels from the first NKERNELS data samples (assume randomised)
+        for (k, sample) in self.kernel.iter_mut().zip(data.iter().take(NKERNELS)) {
             k.mean.copy_from_slice(sample);
             k.var.fill(1.0);
         }
 
-        let mut new_kernal = [GKernal::new(); NKERNALS];
+        let mut new_kernel = [GKernal::new(); NKERNELS];
         let mut sample2cluster: Vec<usize> = Vec::with_capacity(data.len());
 
         for ep in 0..max_iter {
@@ -169,34 +256,35 @@ impl<const IDIM: usize, const NKERNALS: usize> RBF<IDIM, NKERNALS> {
             let mut gdist = 0.0;
 
             // assign samples to their nearest cluster
-            let mut cluster_counts: [usize; NKERNALS] = [0; NKERNALS];
+            let mut cluster_counts: [usize; NKERNELS] = [0; NKERNELS];
             for x in data {
-                let (min_dist, min_pos) = self.nearest_kernal(x);
+                let (min_dist, min_pos) = self.nearest_kernel(x);
                 sample2cluster.push(min_pos);
-                cluster_counts[min_pos]+=1;
+                cluster_counts[min_pos] += 1;
                 gdist += min_dist;
             }
             gdist /= data.len() as f64;
 
-            // re-estimate kernals 
-            for c in 0..NKERNALS {
-                if cluster_counts[c]>1 {
-                    let dta: Vec<&[f64; IDIM]> = data.iter()
+            // re-estimate kernels
+            for c in 0..NKERNELS {
+                if cluster_counts[c] > 1 {
+                    let dta: Vec<&[f64; IDIM]> = data
+                        .iter()
                         .enumerate()
                         .filter(|(i, _)| sample2cluster[*i] == c)
                         .map(|(_, v)| v)
                         .collect();
-                    new_kernal[c].estimate(dta);
+                    new_kernel[c].estimate(dta);
                 }
             }
 
-            // check for convergence - distance betwen old and new kernal estimates
-            let cdist: f64 = (0..NKERNALS)
-                .map(|c| self.kernal[c].dist(&new_kernal[c].mean))
+            // check for convergence - distance betwen old and new kernel estimates
+            let cdist: f64 = (0..NKERNELS)
+                .map(|c| self.kernel[c].dist(&new_kernel[c].mean))
                 .sum();
             println!("Kmeans ep: {ep}; gdist: {gdist:>5.2}; cdist: {cdist:>5.2}");
 
-            std::mem::swap(&mut self.kernal, &mut new_kernal);
+            std::mem::swap(&mut self.kernel, &mut new_kernel);
 
             if cdist <= EPSILON {
                 break;
@@ -204,8 +292,8 @@ impl<const IDIM: usize, const NKERNALS: usize> RBF<IDIM, NKERNALS> {
         }
     }
 
-    fn nearest_kernal(&self, x: &[f64; IDIM]) -> (f64, usize) {
-        self.kernal
+    fn nearest_kernel(&self, x: &[f64; IDIM]) -> (f64, usize) {
+        self.kernel
             .iter()
             .enumerate()
             .map(|(i, k)| (k.dist(x), i))
@@ -219,123 +307,8 @@ impl<const IDIM: usize, const NKERNALS: usize> RBF<IDIM, NKERNALS> {
     }
 }
 
-fn plot_mse(mse: &[f64], title: &str) {
-    let epochs: Vec<i32> = (0..mse.len()).map(|i| i as i32).collect();
-    let mut fg = Figure::new();
-    fg.axes2d()
-        .set_title(title, &[])
-        .set_x_label("Epoch", &[])
-        .set_y_label("MSE", &[])
-        .lines(
-            &epochs,
-            mse,
-            &[gnuplot::Caption("MSE"), gnuplot::Color("black")],
-        );
-    fg.show().unwrap();
-}
-
-fn calc_mean(data: &[[f64; 3]]) -> Vec<f64> {
-    let mean: Vec<f64> = data.iter().fold(vec![0.0; 3], |acc, x| {
-        acc.iter().zip(x.iter()).map(|(a, b)| a + b).collect()
-    });
-    mean.iter().map(|x| x / data.len() as f64).collect()
-}
-
-fn normalise_mean(data: &mut [[f64; 3]], mean: &[f64]) {
-    for sample in data {
-        for (value, &mean_val) in sample.iter_mut().zip(mean.iter()) {
-            *value -= mean_val;
-        }
-    }
-}
-
-fn calc_max_vals(data: &[[f64; 3]]) -> Vec<f64> {
-    data.iter().fold(vec![0.0; 3], |acc, x| {
-        acc.iter()
-            .zip(x.iter())
-            .map(|(a, b)| a.max(b.abs()))
-            .collect()
-    })
-}
-
-fn normalise_max_val(data: &mut [[f64; 3]], max_vals: &[f64]) {
-    const EPSILON: f64 = 1e-10;
-    for sample in data {
-        for (value, &max_val) in sample.iter_mut().zip(max_vals.iter()) {
-            if max_val > EPSILON {
-                *value /= max_val
-            } else {
-            }
-        }
-    }
-}
-
-// least squares with L2 regularisation  (mu)
-fn least_squares(dist: f64, mu: f64) {
-    let central_radius = 10.0;
-    let radius_variation = 6.0;
-    let (data, labels) = halfmoons::<3000>(central_radius, radius_variation, dist);
-    let mut data: Vec<_> = data
-        .into_iter()
-        .map(|[x, y]| [1.0, x, y]) // Add 1.0 - gives the perceptron a bias term
-        .collect();
-
-    const NTRAIN: usize = 1000;
-
-    let mean = calc_mean(&data[..NTRAIN]);
-    normalise_mean(&mut data[..NTRAIN], &mean);
-    normalise_mean(&mut data[NTRAIN..], &mean);
-
-    let max_vals = calc_max_vals(&data[..NTRAIN]);
-    normalise_max_val(&mut data[..NTRAIN], &max_vals);
-    normalise_max_val(&mut data[NTRAIN..], &max_vals);
-
-    // Calculate weights using least squares (LS)
-    let mut a = DMatrix::zeros(NTRAIN, 2);
-    let mut yy = DVector::zeros(NTRAIN);
-
-    for i in 0..NTRAIN {
-        a[(i, 0)] = data[i][1];
-        a[(i, 1)] = data[i][2];
-        yy[i] = labels[i] as f64;
-    }
-
-    // LS solution: w = inv(A'A + mu*I) * A'yy
-    let mu_identity = DMatrix::identity(2, 2) * mu; // mu * I
-    let a_t = a.transpose(); // Transpose of A
-    let w = (a_t.clone() * a + mu_identity).try_inverse().unwrap() * a_t * yy; // Use try_inverse()
-
-    let mut weights = [0.0f64; 3];
-    weights[1] = w[0];
-    weights[2] = w[1];
-
-    let correct: usize = data[NTRAIN..]
-        .iter()
-        .zip(labels[NTRAIN..].iter())
-        .map(|(x, d)| {
-            x.iter()
-                .zip(weights.iter())
-                .map(|(xi, wi)| xi * wi)
-                .sum::<f64>()
-                .signum() as i8
-                == *d
-        })
-        .filter(|f| *f)
-        .count();
-
-    let error = 1.0 - correct as f64 / data[NTRAIN..].len() as f64;
-    let error = 100.0 * error;
-    let title = format!(
-        "Least Squares Classification with Half-Moon Data - dist: {dist}; L2-reg: {mu}; Error: {error:.1}%"
-    );
-    plot(&data[NTRAIN..], &weights, &title);
-}
-
 fn main() {
-    rbf(0.0);
-    //for dist in [0.0] {
-    //    for mu in [0.0, 0.1] {
-    //        least_squares(dist, mu);
-    //    }
-    //}
+    for dist in [-5.0] {
+        rbf(dist);
+    }
 }
