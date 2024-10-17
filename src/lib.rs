@@ -175,17 +175,6 @@ pub fn plot(data: &[[f64; 3]], weights: &[f64], title: &str) {
     fg.show().unwrap();
 }
 
-pub fn plot0(data: &[[f64; 2]], title: &str) {
-    let vx: Vec<f64> = data.iter().map(|v| v[0]).collect();
-    let vy: Vec<f64> = data.iter().map(|v| v[1]).collect();
-    // Plot using gnuplot
-    let mut fg = Figure::new();
-    fg.axes2d()
-        .set_title(title, &[])
-        .points(&vx, &vy, &[PointSymbol('O'), Color("blue")]); // Original data points
-    fg.show().unwrap();
-}
-
 pub fn add(left: u64, right: u64) -> u64 {
     left + right
 }

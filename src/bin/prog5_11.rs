@@ -1,4 +1,4 @@
-use gnuplot::{AxesCommon, Figure};
+use gnuplot::{AxesCommon, Caption, Color, Figure, LineStyle,Solid, LineWidth};
 use nnlm::*;
 use std::fmt;
 use stmc_rs::marsaglia::Marsaglia;
@@ -53,7 +53,7 @@ impl<const IDIM: usize> GKernal<IDIM> {
         self.mean.fill(0.0);
         self.var.fill(0.0);
         let mut old_mean = [0.0f64; IDIM];
-        for (i, item) in data.clone().into_iter().enumerate() {
+        for (i, item) in data.into_iter().enumerate() {
             let v = item.as_ref();
             count += 1;
             old_mean.copy_from_slice(&self.mean);
@@ -143,23 +143,34 @@ fn rbf(dist: f64) {
     let central_radius = 10.0;
     let radius_variation = 6.0;
     let (data, labels) = halfmoons::<3000>(central_radius, radius_variation, dist);
-    plot0(&data, "plot0");
     let mut model = RBF::<2, 20>::new();
 
     const MAX_ITER: usize = 100;
     model.train_kernels(&data[..1000], MAX_ITER);
 
-    let centers: Vec<[f64; 2]> = model
-        .kernel
-        .iter()
-        .map(|k| [k.mean[0], k.mean[1]])
-        .collect();
-    plot0(&centers, "kernel centers");
     let mse = model.train_weights(&data[..1000], &labels[..1000], MAX_ITER);
     let title = format!("Training RBF network for dist: {dist}");
     plot_mse(&mse, &title);
     println!("{model}");
-    model.eval(&data[1000..], &labels[1000..]);
+    model.eval(&data[..1000], &labels[..1000], "Training data:");
+    model.eval(&data[1000..], &labels[1000..], "Test data:");
+
+    let pdata: Vec<(f64, f64, f64)> = data
+        .iter()
+        .zip(labels.iter())
+        .map(|(a, l)| (a[0], a[1], *l as f64))
+        .collect();
+    let centers: Vec<(f64, f64)> = model
+        .kernel
+        .iter()
+        .map(|k| (k.mean[0], k.mean[1]))
+        .collect();
+    let vars: Vec<(f64, f64)> = model
+        .kernel
+        .iter()
+        .map(|k| (k.var[0], k.var[1]))
+        .collect();
+    plot_rbf(&pdata, &centers, &vars);
 }
 
 impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
@@ -184,7 +195,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
             .signum()
     }
 
-    fn eval(&self, data: &[[f64; IDIM]], labels: &[i8]) {
+    fn eval(&self, data: &[[f64; IDIM]], labels: &[i8], title: &str) {
         let mut errors = 0;
         for (x, label) in data.iter().zip(labels) {
             let y = self.output(x) as i8;
@@ -194,7 +205,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
             }
         }
         let errp = 100.0 * errors as f64 / data.len() as f64;
-        println!("errors: {errors}/{} ({errp:>8.2})", data.len());
+        println!("{title} errors: {errors}/{} = {errp:>6.2}%", data.len());
     }
 
     fn train_weights(&mut self, data: &[[f64; IDIM]], labels: &[i8], max_iter: usize) -> Vec<f64> {
@@ -203,27 +214,26 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
             let lr = 0.1 / (1.0 + ep as f64);
             let mut mse = 0.0;
             for (sampn, (x, label)) in data.iter().zip(labels).enumerate() {
-                let k: Vec<f64> = self
-                    .kernel
-                    .iter()
-                    .map(|&k| k.p(x))
-                    .collect();
+                let k: Vec<f64> = self.kernel.iter().map(|&k| k.p(x)).collect();
                 let d = *label as f64;
-                let y: f64 = k.iter().zip(self.weights.iter()).map(|(g,w)| g*w).sum::<f64>();
+                let y: f64 = k
+                    .iter()
+                    .zip(self.weights.iter())
+                    .map(|(g, w)| g * w)
+                    .sum::<f64>();
                 let e = d - y;
 
                 mse += e * e;
                 self.weights
                     .iter_mut()
                     .zip(k.iter())
-                    .map(|(w, ki)| (w,lr * e * ki))
+                    .map(|(w, ki)| (w, lr * e * ki))
                     .for_each(|(w, grad)| *w += grad);
                 self.normalise_weights();
             }
             mse /= data.len() as f64;
             lmse.push(mse);
             println!("ep {ep} {mse}");
-            self.eval(data, labels);
         }
         lmse
     }
@@ -312,3 +322,76 @@ fn main() {
         rbf(dist);
     }
 }
+
+fn plot_rbf(
+    halfmoon_data: &Vec<(f64, f64, f64)>, // tuple of (x, y, label)
+    centers: &Vec<(f64, f64)>,            // RBF centers (x, y)
+    variances: &Vec<(f64, f64)>,          // Variance components (x_var, y_var) for each center
+) {
+    let mut fg = Figure::new();
+
+    // Extract the data points by class (positive and negative)
+    let (x_pos, y_pos): (Vec<f64>, Vec<f64>) = halfmoon_data
+        .iter()
+        .filter(|(_, _, label)| *label > 0.0)
+        .map(|(x, y, _)| (*x, *y))
+        .unzip();
+
+    let (x_neg, y_neg): (Vec<f64>, Vec<f64>) = halfmoon_data
+        .iter()
+        .filter(|(_, _, label)| *label < 0.0)
+        .map(|(x, y, _)| (*x, *y))
+        .unzip();
+
+    // Extract the centers
+    let (x_c, y_c): (Vec<f64>, Vec<f64>) = centers.iter().cloned().unzip();
+
+    // Plot the data points
+    let axes = fg.axes2d()
+        .points(
+            &x_pos,
+            &y_pos,
+            &[Caption("Class 1"), Color("red"), gnuplot::PointSize(2.0)],
+        )
+        .points(
+            &x_neg,
+            &y_neg,
+            &[Caption("Class -1"), Color("green"), gnuplot::PointSize(2.0)],
+        )
+        .points(
+            &x_c,
+            &y_c,
+            &[
+                Caption("RBF Centers"),
+                Color("black"),
+                gnuplot::PointSize(4.0),
+            ],
+        )
+        .set_title("Data with RBF kernels indicated", &[])
+        .set_x_label("x", &[])
+        .set_y_label("y", &[]);
+
+    // Plot ellipsoids around the RBF centers using the variances as axes
+    for ((x, y), (x_var, y_var)) in centers.iter().zip(variances.iter()) {
+        let ellipse_points: Vec<(f64, f64)> = (0..100)
+            .map(|i| {
+                let angle = 2.0 * std::f64::consts::PI * (i as f64) / 100.0;
+                let ellipse_x = x + (x_var.sqrt() * angle.cos());
+                let ellipse_y = y + (y_var.sqrt() * angle.sin());
+                (ellipse_x, ellipse_y)
+            })
+            .collect();
+
+        let (ellipse_x, ellipse_y): (Vec<f64>, Vec<f64>) = ellipse_points.into_iter().unzip();
+
+        // Plot the ellipsoid
+        axes.lines(
+            &ellipse_x,
+            &ellipse_y,
+            &[Color("black"), LineWidth(1.0), LineStyle(Solid)],
+        );
+    }
+
+    fg.show().unwrap();
+}
+
