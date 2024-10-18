@@ -178,7 +178,6 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
         let mut rng = Marsaglia::new(12, 34, 56, 78);
         let mut weights = [0.0f64; NKERNELS];
         weights.iter_mut().for_each(|w| *w = 0.5 * rng.uni() - 0.25);
-        println!("weights: {weights:?}");
         Self {
             kernel: [GKernal::new(); NKERNELS],
             weights,
@@ -277,7 +276,9 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
 
             // re-estimate kernels
             for c in 0..NKERNELS {
-                if cluster_counts[c] > 1 {
+                if cluster_counts[c] < 5 {
+                    println!("Warning: kernel {c} only has {} samples - not updating", cluster_counts[c]);
+                } else {
                     let dta: Vec<&[f64; IDIM]> = data
                         .iter()
                         .enumerate()

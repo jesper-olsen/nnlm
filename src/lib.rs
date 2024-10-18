@@ -1,5 +1,6 @@
 use gnuplot::{AxesCommon, Color, Figure, PointSymbol};
-use rand::Rng;
+//use rand::Rng;
+use stmc_rs::marsaglia::Marsaglia;
 
 /// Halfmoons: randomly samples two "half moons". Returns samples and their labels. Samples are 3D:
 /// 1 (bias) + 2d coordinates
@@ -16,17 +17,17 @@ pub fn halfmoons<const NSAMP: usize>(
         panic!("The central_radius should be at least larger than half the radius_variation");
     }
 
-    let mut rng = rand::thread_rng();
+    let mut rng = Marsaglia::new(12, 34, 56, 78);
     let mut data = [[0.0; 2]; NSAMP];
     let mut labels = [0; NSAMP];
     for i in (0..NSAMP).step_by(2) {
-        let radius = central_radius - radius_variation / 2.0 + radius_variation * rng.gen::<f64>();
-        let theta = std::f64::consts::PI * rng.gen::<f64>();
+        let radius = central_radius - radius_variation / 2.0 + radius_variation * rng.uni();
+        let theta = std::f64::consts::PI * rng.uni();
         data[i] = [radius * theta.cos(), radius * theta.sin()];
         labels[i] = 1;
 
-        let radius = central_radius - radius_variation / 2.0 + radius_variation * rng.gen::<f64>();
-        let theta = std::f64::consts::PI * rng.gen::<f64>();
+        let radius = central_radius - radius_variation / 2.0 + radius_variation * rng.uni();
+        let theta = std::f64::consts::PI * rng.uni();
         data[i + 1] = [
             -radius * theta.cos() + central_radius,
             -radius * theta.sin() - dist,
