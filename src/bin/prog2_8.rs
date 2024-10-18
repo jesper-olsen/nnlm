@@ -1,4 +1,3 @@
-use gnuplot::{AxesCommon, Figure};
 use nalgebra::{DMatrix, DVector};
 use nnlm::*;
 
@@ -32,7 +31,6 @@ fn normalise_max_val(data: &mut [[f64; 3]], max_vals: &[f64]) {
         for (value, &max_val) in sample.iter_mut().zip(max_vals.iter()) {
             if max_val > EPSILON {
                 *value /= max_val
-            } else {
             }
         }
     }

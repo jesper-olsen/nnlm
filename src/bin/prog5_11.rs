@@ -1,4 +1,6 @@
-use gnuplot::{AxesCommon, Caption, Color, Figure, LineStyle,Solid, LineWidth};
+use gnuplot::{AxesCommon, Caption, Color, Figure, LineStyle, LineWidth, Solid};
+use na::DMatrix;
+use nalgebra as na;
 use nnlm::*;
 use std::fmt;
 use stmc_rs::marsaglia::Marsaglia;
@@ -118,7 +120,7 @@ impl<const IDIM: usize> GKernal<IDIM> {
 }
 
 pub struct RBF<const IDIM: usize, const NKERNELS: usize> {
-    kernel: [GKernal<IDIM>; NKERNELS],
+    kernels: [GKernal<IDIM>; NKERNELS],
     weights: [f64; NKERNELS],
 }
 
@@ -133,7 +135,7 @@ impl<const IDIM: usize, const NKERNELS: usize> fmt::Display for RBF<IDIM, NKERNE
         writeln!(f)?;
 
         for i in 0..NKERNELS {
-            write!(f, "{i}: {}", self.kernel[i])?;
+            write!(f, "{i}: {}", self.kernels[i])?;
         }
         Ok(())
     }
@@ -147,30 +149,26 @@ fn rbf(dist: f64) {
 
     const MAX_ITER: usize = 100;
     model.train_kernels(&data[..1000], MAX_ITER);
-
-    let mse = model.train_weights(&data[..1000], &labels[..1000], MAX_ITER);
-    let title = format!("Training RBF network for dist: {dist}");
-    plot_mse(&mse, &title);
-    println!("{model}");
-    model.eval(&data[..1000], &labels[..1000], "Training data:");
-    model.eval(&data[1000..], &labels[1000..], "Test data:");
-
     let pdata: Vec<(f64, f64, f64)> = data
         .iter()
         .zip(labels.iter())
         .map(|(a, l)| (a[0], a[1], *l as f64))
         .collect();
     let centers: Vec<(f64, f64)> = model
-        .kernel
+        .kernels
         .iter()
         .map(|k| (k.mean[0], k.mean[1]))
         .collect();
-    let vars: Vec<(f64, f64)> = model
-        .kernel
-        .iter()
-        .map(|k| (k.var[0], k.var[1]))
-        .collect();
+    let vars: Vec<(f64, f64)> = model.kernels.iter().map(|k| (k.var[0], k.var[1])).collect();
     plot_rbf(&pdata, &centers, &vars);
+
+    //let mse = model.train_weights_lms(&data[..1000], &labels[..1000], MAX_ITER);
+    let mse = model.train_weights_rhs(&data[..1000], &labels[..1000], MAX_ITER);
+    let title = format!("Training RBF network for dist: {dist}");
+    plot_mse(&mse, &title);
+    println!("{model}");
+    model.eval(&data[..1000], &labels[..1000], "Training data:");
+    model.eval(&data[1000..], &labels[1000..], "Test data:");
 }
 
 impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
@@ -179,14 +177,14 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
         let mut weights = [0.0f64; NKERNELS];
         weights.iter_mut().for_each(|w| *w = 0.5 * rng.uni() - 0.25);
         Self {
-            kernel: [GKernal::new(); NKERNELS],
+            kernels: [GKernal::new(); NKERNELS],
             weights,
         }
     }
 
     pub fn output(&self, x: &[f64]) -> f64 {
         assert_eq!(x.len(), IDIM, "Input length does not match expected IDIM");
-        self.kernel
+        self.kernels
             .iter()
             .zip(self.weights.iter())
             .map(|(&k, &w)| w * k.p(x))
@@ -207,13 +205,69 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
         println!("{title} errors: {errors}/{} = {errp:>6.2}%", data.len());
     }
 
-    fn train_weights(&mut self, data: &[[f64; IDIM]], labels: &[i8], max_iter: usize) -> Vec<f64> {
+    fn train_weights_rhs(
+        &mut self,
+        data: &[[f64; IDIM]],
+        labels: &[i8],
+        max_iter: usize,
+    ) -> Vec<f64> {
+        let sig = 0.01;
+        let lambda = 1.0;
+        let mut p = DMatrix::identity(NKERNELS, NKERNELS) / sig;
+
+        let mut lmse = Vec::<f64>::new();
+        for _ep in 0..max_iter {
+            let mut mse = 0.0;
+            for (_, (x, label)) in data.iter().zip(labels).enumerate() {
+                let d = *label as f64; // 1 or -1
+                let k: Vec<f64> = self.kernels.iter().map(|&k| k.p(x)).collect();
+
+                let k_matrix = DMatrix::from_vec(k.len(), 1, k.clone());
+
+                // Calculate pai and kk
+                let pai = &p * &k_matrix;
+                let g_t_pai = k
+                    .iter()
+                    .zip(pai.iter())
+                    .map(|(gi, pi)| gi * pi)
+                    .sum::<f64>();
+                let kk = pai / (lambda + g_t_pai);
+
+                let e = d - self
+                    .weights
+                    .iter()
+                    .zip(&k)
+                    .map(|(wi, gi)| wi * gi)
+                    .sum::<f64>();
+                let w_delta: Vec<f64> = kk.iter().map(|&kki| kki * e).collect();
+                mse += e * e;
+
+                for (wi, wd) in self.weights.iter_mut().zip(w_delta.iter()) {
+                    *wi += wd;
+                }
+
+                let g_t_p = k_matrix.transpose() * &p;
+                let kk_g_t_p = kk * g_t_p;
+                p = (&p - kk_g_t_p)/lambda;
+            }
+            mse /= data.len() as f64;
+            lmse.push(mse);
+        }
+        lmse
+    }
+
+    fn train_weights_lms(
+        &mut self,
+        data: &[[f64; IDIM]],
+        labels: &[i8],
+        max_iter: usize,
+    ) -> Vec<f64> {
         let mut lmse = Vec::<f64>::new();
         for ep in 0..max_iter {
             let lr = 0.1 / (1.0 + ep as f64);
             let mut mse = 0.0;
-            for (sampn, (x, label)) in data.iter().zip(labels).enumerate() {
-                let k: Vec<f64> = self.kernel.iter().map(|&k| k.p(x)).collect();
+            for (_, (x, label)) in data.iter().zip(labels).enumerate() {
+                let k: Vec<f64> = self.kernels.iter().map(|&k| k.p(x)).collect();
                 let d = *label as f64;
                 let y: f64 = k
                     .iter()
@@ -232,7 +286,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
             }
             mse /= data.len() as f64;
             lmse.push(mse);
-            println!("ep {ep} {mse}");
+            //println!("ep {ep} {mse}");
         }
         lmse
     }
@@ -252,7 +306,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
         );
 
         // Initialize kernels from the first NKERNELS data samples (assume randomised)
-        for (k, sample) in self.kernel.iter_mut().zip(data.iter().take(NKERNELS)) {
+        for (k, sample) in self.kernels.iter_mut().zip(data.iter().take(NKERNELS)) {
             k.mean.copy_from_slice(sample);
             k.var.fill(1.0);
         }
@@ -277,7 +331,10 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
             // re-estimate kernels
             for c in 0..NKERNELS {
                 if cluster_counts[c] < 5 {
-                    println!("Warning: kernel {c} only has {} samples - not updating", cluster_counts[c]);
+                    println!(
+                        "Warning: kernel {c} only has {} samples - not updating",
+                        cluster_counts[c]
+                    );
                 } else {
                     let dta: Vec<&[f64; IDIM]> = data
                         .iter()
@@ -291,11 +348,11 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
 
             // check for convergence - distance betwen old and new kernel estimates
             let cdist: f64 = (0..NKERNELS)
-                .map(|c| self.kernel[c].dist(&new_kernel[c].mean))
+                .map(|c| self.kernels[c].dist(&new_kernel[c].mean))
                 .sum();
             println!("Kmeans ep: {ep}; gdist: {gdist:>5.2}; cdist: {cdist:>5.2}");
 
-            std::mem::swap(&mut self.kernel, &mut new_kernel);
+            std::mem::swap(&mut self.kernels, &mut new_kernel);
 
             if cdist <= EPSILON {
                 break;
@@ -304,7 +361,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
     }
 
     fn nearest_kernel(&self, x: &[f64; IDIM]) -> (f64, usize) {
-        self.kernel
+        self.kernels
             .iter()
             .enumerate()
             .map(|(i, k)| (k.dist(x), i))
@@ -325,9 +382,9 @@ fn main() {
 }
 
 fn plot_rbf(
-    halfmoon_data: &Vec<(f64, f64, f64)>, // tuple of (x, y, label)
-    centers: &Vec<(f64, f64)>,            // RBF centers (x, y)
-    variances: &Vec<(f64, f64)>,          // Variance components (x_var, y_var) for each center
+    halfmoon_data: &[(f64, f64, f64)], // tuple of (x, y, label)
+    centers: &[(f64, f64)],            // RBF centers (x, y)
+    variances: &[(f64, f64)],          // Variance components (x_var, y_var) for each center
 ) {
     let mut fg = Figure::new();
 
@@ -348,7 +405,8 @@ fn plot_rbf(
     let (x_c, y_c): (Vec<f64>, Vec<f64>) = centers.iter().cloned().unzip();
 
     // Plot the data points
-    let axes = fg.axes2d()
+    let axes = fg
+        .axes2d()
         .points(
             &x_pos,
             &y_pos,
@@ -395,4 +453,3 @@ fn plot_rbf(
 
     fg.show().unwrap();
 }
-
