@@ -248,7 +248,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
 
                 let g_t_p = k_matrix.transpose() * &p;
                 let kk_g_t_p = kk * g_t_p;
-                p = (&p - kk_g_t_p)/lambda;
+                p = (&p - kk_g_t_p) / lambda;
             }
             mse /= data.len() as f64;
             lmse.push(mse);
@@ -382,13 +382,12 @@ fn main() {
 }
 
 fn plot_rbf(
-    halfmoon_data: &[(f64, f64, f64)], // tuple of (x, y, label)
-    centers: &[(f64, f64)],            // RBF centers (x, y)
-    variances: &[(f64, f64)],          // Variance components (x_var, y_var) for each center
+    halfmoon_data: &[(f64, f64, f64)], // (x, y, label)
+    centers: &[(f64, f64)],            // Kernel means
+    variances: &[(f64, f64)],          // Kernel variances
 ) {
     let mut fg = Figure::new();
 
-    // Extract the data points by class (positive and negative)
     let (x_pos, y_pos): (Vec<f64>, Vec<f64>) = halfmoon_data
         .iter()
         .filter(|(_, _, label)| *label > 0.0)
@@ -401,7 +400,6 @@ fn plot_rbf(
         .map(|(x, y, _)| (*x, *y))
         .unzip();
 
-    // Extract the centers
     let (x_c, y_c): (Vec<f64>, Vec<f64>) = centers.iter().cloned().unzip();
 
     // Plot the data points
@@ -443,7 +441,6 @@ fn plot_rbf(
 
         let (ellipse_x, ellipse_y): (Vec<f64>, Vec<f64>) = ellipse_points.into_iter().unzip();
 
-        // Plot the ellipsoid
         axes.lines(
             &ellipse_x,
             &ellipse_y,
