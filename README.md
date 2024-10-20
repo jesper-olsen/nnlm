@@ -87,7 +87,7 @@ var:      3.36     0.39
 mean:    12.78    -7.26
 var:      0.14     0.04
 
-Training data: errors: 0/1000 =   0.00%
-Test data: errors: 0/2000 =   0.00%
+Errors - Training data:: 0/1000 =   0.00%
+Errors - Test data:: 0/2000 =   0.00%
 ```
 

@@ -167,8 +167,8 @@ fn rbf(dist: f64) {
     let title = format!("Training RBF network for dist: {dist}");
     plot_mse(&mse, &title);
     println!("{model}");
-    model.eval(&data[..1000], &labels[..1000], "Training data:");
-    model.eval(&data[1000..], &labels[1000..], "Test data:");
+    model.eval(&data[..1000], &labels[..1000], "Errors - Training data:");
+    model.eval(&data[1000..], &labels[1000..], "Errors - Test data:");
 }
 
 impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
@@ -202,7 +202,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
             }
         }
         let errp = 100.0 * errors as f64 / data.len() as f64;
-        println!("{title} errors: {errors}/{} = {errp:>6.2}%", data.len());
+        println!("{title}: {errors}/{} = {errp:>6.2}%", data.len());
     }
 
     fn train_weights_rhs(
