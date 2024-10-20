@@ -19,3 +19,6 @@ See src/bin - e.g. problem 5.11, train a Radial Basis Function network on the ha
 ```
 % cargo run --bin prog5_11
 ```
+
+![PNG](https://raw.githubusercontent.com/jesper-olsen/nnlm/master/prog5_11_kernels.png) 
+
