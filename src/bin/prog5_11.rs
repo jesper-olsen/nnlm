@@ -16,14 +16,14 @@ fn clip_gradient(grad: f64, max_grad: f64) -> f64 {
 }
 
 #[derive(Copy, Clone)]
-struct GKernal<const IDIM: usize> {
+struct GKernel<const IDIM: usize> {
     mean: [f64; IDIM],
     var: [f64; IDIM],
 }
 
-impl<const IDIM: usize> fmt::Display for GKernal<IDIM> {
+impl<const IDIM: usize> fmt::Display for GKernel<IDIM> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "GKernal")?;
+        writeln!(f, "GKernel")?;
         write!(f, "mean: ")?;
         for j in 0..IDIM {
             write!(f, "{:>8.2} ", self.mean[j])?;
@@ -38,7 +38,7 @@ impl<const IDIM: usize> fmt::Display for GKernal<IDIM> {
     }
 }
 
-impl<const IDIM: usize> GKernal<IDIM> {
+impl<const IDIM: usize> GKernel<IDIM> {
     pub fn new() -> Self {
         Self {
             mean: [0.0; IDIM],
@@ -120,7 +120,7 @@ impl<const IDIM: usize> GKernal<IDIM> {
 }
 
 pub struct RBF<const IDIM: usize, const NKERNELS: usize> {
-    kernels: [GKernal<IDIM>; NKERNELS],
+    kernels: [GKernel<IDIM>; NKERNELS],
     weights: [f64; NKERNELS],
 }
 
@@ -177,7 +177,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
         let mut weights = [0.0f64; NKERNELS];
         weights.iter_mut().for_each(|w| *w = 0.5 * rng.uni() - 0.25);
         Self {
-            kernels: [GKernal::new(); NKERNELS],
+            kernels: [GKernel::new(); NKERNELS],
             weights,
         }
     }
@@ -305,34 +305,32 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
             "Not enough data samples to initialize centroids."
         );
 
-        // Initialize kernels from the first NKERNELS data samples (assume randomised)
+        // Initialize kernel means from the first NKERNELS data samples (assume randomised)
+        let mut global_kernel = GKernel::<IDIM>::new();
+        global_kernel.estimate(data.iter()); 
         for (k, sample) in self.kernels.iter_mut().zip(data.iter().take(NKERNELS)) {
-            k.mean.copy_from_slice(sample);
-            k.var.fill(1.0);
+            k.mean.copy_from_slice(sample);               // use sample
+            k.var.copy_from_slice(&global_kernel.var);    // please the borrow checker
         }
 
-        let mut new_kernel = [GKernal::new(); NKERNELS];
+        let mut new_kernels = [GKernel::new(); NKERNELS];
         let mut sample2cluster: Vec<usize> = Vec::with_capacity(data.len());
 
         for ep in 0..max_iter {
             sample2cluster.clear();
-            let mut gdist = 0.0;
-
-            // assign samples to their nearest cluster
+            // E-step - assign samples to their nearest cluster
             let mut cluster_counts: [usize; NKERNELS] = [0; NKERNELS];
             for x in data {
                 let (min_dist, min_pos) = self.nearest_kernel(x);
                 sample2cluster.push(min_pos);
                 cluster_counts[min_pos] += 1;
-                gdist += min_dist;
             }
-            gdist /= data.len() as f64;
 
-            // re-estimate kernels
+            // M step - re-estimate kernels
             for c in 0..NKERNELS {
                 if cluster_counts[c] < 5 {
                     println!(
-                        "Warning: kernel {c} only has {} samples - not updating",
+                        "Warning: kernels{c} only has {} samples - not updating",
                         cluster_counts[c]
                     );
                 } else {
@@ -342,17 +340,17 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
                         .filter(|(i, _)| sample2cluster[*i] == c)
                         .map(|(_, v)| v)
                         .collect();
-                    new_kernel[c].estimate(dta);
+                    new_kernels[c].estimate(dta);
                 }
             }
 
-            // check for convergence - distance betwen old and new kernel estimates
+            // check for convergence - distance betwen old and new kernelsestimates
             let cdist: f64 = (0..NKERNELS)
-                .map(|c| self.kernels[c].dist(&new_kernel[c].mean))
+                .map(|c| self.kernels[c].dist(&new_kernels[c].mean))
                 .sum();
-            println!("Kmeans ep: {ep}; gdist: {gdist:>5.2}; cdist: {cdist:>5.2}");
+            println!("Kmeans ep: {ep}; cdist: {cdist:>5.2}");
 
-            std::mem::swap(&mut self.kernels, &mut new_kernel);
+            std::mem::swap(&mut self.kernels, &mut new_kernels);
 
             if cdist <= EPSILON {
                 break;
