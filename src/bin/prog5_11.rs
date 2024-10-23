@@ -224,7 +224,6 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
 
                 let k_matrix = DMatrix::from_vec(k.len(), 1, k.clone());
 
-                // Calculate pai and kk
                 let pai = &p * &k_matrix;
                 let g_t_pai = k
                     .iter()
@@ -307,51 +306,47 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
 
         // Initialize kernel means from the first NKERNELS data samples (assume randomised)
         let mut global_kernel = GKernel::<IDIM>::new();
-        global_kernel.estimate(data.iter()); 
+        global_kernel.estimate(data.iter()); // please the borrow checker
         for (k, sample) in self.kernels.iter_mut().zip(data.iter().take(NKERNELS)) {
-            k.mean.copy_from_slice(sample);               // use sample
-            k.var.copy_from_slice(&global_kernel.var);    // please the borrow checker
+            k.mean.copy_from_slice(sample); // use sample
+            k.var.copy_from_slice(&global_kernel.var);
         }
 
         let mut new_kernels = [GKernel::new(); NKERNELS];
-        let mut sample2cluster: Vec<usize> = Vec::with_capacity(data.len());
+        let mut sample2kernel: Vec<usize> = Vec::with_capacity(data.len());
 
         for ep in 0..max_iter {
-            sample2cluster.clear();
+            sample2kernel.clear();
             // E-step - assign samples to their nearest cluster
-            let mut cluster_counts: [usize; NKERNELS] = [0; NKERNELS];
-            for x in data {
-                let (min_dist, min_pos) = self.nearest_kernel(x);
-                sample2cluster.push(min_pos);
-                cluster_counts[min_pos] += 1;
-            }
+            data.iter()
+                .map(|x| self.nearest_kernel(x))
+                .for_each(|(_, k)| sample2kernel.push(k));
 
             // M step - re-estimate kernels
             for c in 0..NKERNELS {
-                if cluster_counts[c] < 5 {
+                let dta: Vec<&[f64; IDIM]> = data
+                    .iter()
+                    .enumerate()
+                    .filter(|(i, _)| sample2kernel[*i] == c)
+                    .map(|(_, v)| v)
+                    .collect();
+                if dta.len() < 5 {
                     println!(
                         "Warning: kernels{c} only has {} samples - not updating",
-                        cluster_counts[c]
+                        dta.len()
                     );
                 } else {
-                    let dta: Vec<&[f64; IDIM]> = data
-                        .iter()
-                        .enumerate()
-                        .filter(|(i, _)| sample2cluster[*i] == c)
-                        .map(|(_, v)| v)
-                        .collect();
                     new_kernels[c].estimate(dta);
                 }
             }
 
-            // check for convergence - distance betwen old and new kernelsestimates
+            std::mem::swap(&mut self.kernels, &mut new_kernels);
+
+            // check for convergence - distance betwen old and new kernel estimates
             let cdist: f64 = (0..NKERNELS)
                 .map(|c| self.kernels[c].dist(&new_kernels[c].mean))
                 .sum();
             println!("Kmeans ep: {ep}; cdist: {cdist:>5.2}");
-
-            std::mem::swap(&mut self.kernels, &mut new_kernels);
-
             if cdist <= EPSILON {
                 break;
             }
