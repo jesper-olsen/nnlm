@@ -46,14 +46,12 @@ impl<const IDIM: usize> GKernel<IDIM> {
         }
     }
 
-    pub fn estimate(&mut self, data: &[[f64; IDIM]]) {
+    pub fn estimate_welford(&mut self, data: &[[f64; IDIM]]) {
         // Estimate mean and variance - Welford's method
-        let mut count = 0;
         self.mean.fill(0.0);
         self.var.fill(0.0);
         let mut old_mean = [0.0f64; IDIM];
         for (i, v) in data.iter().enumerate() {
-            count += 1;
             old_mean.copy_from_slice(&self.mean);
             self.mean
                 .iter_mut()
@@ -63,7 +61,31 @@ impl<const IDIM: usize> GKernel<IDIM> {
                 self.var[j] += (v[j] - self.mean[j]) * (v[j] - old_mean[j]);
             }
         }
-        self.var.iter_mut().for_each(|e| *e /= (count - 1) as f64);
+        self.var
+            .iter_mut()
+            .for_each(|e| *e /= (data.len() - 1) as f64);
+    }
+
+    pub fn estimate(&mut self, data: &[[f64; IDIM]]) {
+        // Estimate mean and variance - 2 pass
+        self.mean.fill(0.0);
+        self.var.fill(0.0);
+
+        let n = data.len() as f64;
+        for v in data {
+            self.mean
+                .iter_mut()
+                .zip(v.iter())
+                .for_each(|(m, x)| *m += *x);
+        }
+        self.mean.iter_mut().for_each(|m| *m /= n);
+
+        for v in data {
+            for i in 0..IDIM {
+                self.var[i] += (v[i]-self.mean[i]).powi(2);
+            }
+        }
+        self.var.iter_mut().for_each(|v| *v /= n - 1.0);
     }
 
     /// Squared Euclidian distance between x and the Gaussian kernel.
@@ -302,7 +324,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
 
         // Initialize kernel means from the first NKERNELS data samples (assume randomised)
         let mut global_kernel = GKernel::<IDIM>::new();
-        global_kernel.estimate(data); // please the borrow checker
+        global_kernel.estimate_welford(data); // please the borrow checker
         for (k, sample) in self.kernels.iter_mut().zip(data.iter().take(NKERNELS)) {
             k.mean.copy_from_slice(sample); // use sample
             k.var.copy_from_slice(&global_kernel.var);
@@ -332,7 +354,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
                         dta.len()
                     );
                 } else {
-                    new_kernels[c].estimate(&dta);
+                    new_kernels[c].estimate_welford(&dta);
                 }
             }
 
