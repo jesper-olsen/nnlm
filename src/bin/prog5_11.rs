@@ -46,17 +46,13 @@ impl<const IDIM: usize> GKernel<IDIM> {
         }
     }
 
-    pub fn estimate<'a, I>(&mut self, data: I)
-    where
-        I: IntoIterator<Item = &'a [f64; IDIM]> + Clone,
-    {
+    pub fn estimate(&mut self, data: &[[f64; IDIM]]) {
         // Estimate mean and variance - Welford's method
         let mut count = 0;
         self.mean.fill(0.0);
         self.var.fill(0.0);
         let mut old_mean = [0.0f64; IDIM];
-        for (i, item) in data.into_iter().enumerate() {
-            let v = item.as_ref();
+        for (i, v) in data.iter().enumerate() {
             count += 1;
             old_mean.copy_from_slice(&self.mean);
             self.mean
@@ -306,7 +302,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
 
         // Initialize kernel means from the first NKERNELS data samples (assume randomised)
         let mut global_kernel = GKernel::<IDIM>::new();
-        global_kernel.estimate(data.iter()); // please the borrow checker
+        global_kernel.estimate(data); // please the borrow checker
         for (k, sample) in self.kernels.iter_mut().zip(data.iter().take(NKERNELS)) {
             k.mean.copy_from_slice(sample); // use sample
             k.var.copy_from_slice(&global_kernel.var);
@@ -324,11 +320,11 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
 
             // M step - re-estimate kernels
             for c in 0..NKERNELS {
-                let dta: Vec<&[f64; IDIM]> = data
+                let dta: Vec<[f64; IDIM]> = data
                     .iter()
                     .enumerate()
                     .filter(|(i, _)| sample2kernel[*i] == c)
-                    .map(|(_, v)| v)
+                    .map(|(_, v)| *v)
                     .collect();
                 if dta.len() < 5 {
                     println!(
@@ -336,7 +332,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
                         dta.len()
                     );
                 } else {
-                    new_kernels[c].estimate(dta);
+                    new_kernels[c].estimate(&dta);
                 }
             }
 
