@@ -475,10 +475,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
                     .map(|(_, v)| *v)
                     .collect();
                 if kcounts[c] < 5 {
-                    println!(
-                        "Warning: kernel {c} only has {} samples - resetting",
-                        dta.len()
-                    );
+                    println!("Warning: kernel {c} only has {} samples - resetting", kcounts[c]);
                     k.reset(
                         &data[(rng.uni() * data.len() as f64) as usize],
                         &global_kernel.var,
