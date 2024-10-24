@@ -458,30 +458,33 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
                 .sum();
 
             // M step - re-estimate kernels
-            let mut kcounts = [0usize;NKERNELS];
+            let mut kcounts = [0usize; NKERNELS];
             for k in &sample2kernel {
                 kcounts[*k] += 1;
             }
-            self.weights.iter_mut().zip(kcounts.iter()).for_each(|(w,cnt)| *w = *cnt as f64 / data.len() as f64);
+            self.weights
+                .iter_mut()
+                .zip(kcounts.iter())
+                .for_each(|(w, cnt)| *w = *cnt as f64 / data.len() as f64);
 
-            for c in 0..NKERNELS {
+            for (c, k) in new_kernels.iter_mut().enumerate() {
                 let dta: Vec<[f64; IDIM]> = data
                     .iter()
                     .enumerate()
                     .filter(|(i, _)| sample2kernel[*i] == c)
                     .map(|(_, v)| *v)
                     .collect();
-                if dta.len() < 5 {
+                if kcounts[c] < 5 {
                     println!(
                         "Warning: kernel {c} only has {} samples - resetting",
                         dta.len()
                     );
-                    new_kernels[c].reset(
+                    k.reset(
                         &data[(rng.uni() * data.len() as f64) as usize],
                         &global_kernel.var,
                     );
                 } else {
-                    new_kernels[c].estimate_welford(&dta);
+                    k.estimate_welford(&dta);
                 }
             }
 
