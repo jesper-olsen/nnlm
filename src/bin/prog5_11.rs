@@ -46,6 +46,19 @@ impl<const IDIM: usize> GKernel<IDIM> {
         }
     }
 
+    pub fn reset(&mut self, mean: &[f64], var: &[f64]) {
+        self.mean.copy_from_slice(mean);
+        self.var.copy_from_slice(var);
+    }
+
+    pub fn split(&mut self, other: &GKernel<IDIM>) {
+        self.mean
+            .iter_mut()
+            .zip(other.mean.iter())
+            .for_each(|(m, om)| *m = *om + 0.001);
+        self.var.copy_from_slice(&other.var);
+    }
+
     pub fn estimate_welford(&mut self, data: &[[f64; IDIM]]) {
         // Estimate mean and variance - Welford's method
         self.mean.fill(0.0);
@@ -82,7 +95,7 @@ impl<const IDIM: usize> GKernel<IDIM> {
 
         for v in data {
             for i in 0..IDIM {
-                self.var[i] += (v[i]-self.mean[i]).powi(2);
+                self.var[i] += (v[i] - self.mean[i]).powi(2);
             }
         }
         self.var.iter_mut().for_each(|v| *v /= n - 1.0);
@@ -162,14 +175,17 @@ impl<const IDIM: usize, const NKERNELS: usize> fmt::Display for RBF<IDIM, NKERNE
 fn rbf(dist: f64) {
     let central_radius = 10.0;
     let radius_variation = 6.0;
-    let (data, labels) = halfmoons::<3000>(central_radius, radius_variation, dist);
+    let (trdata, trlabels) = halfmoons::<3000>(central_radius, radius_variation, dist);
+    let (tedata, telabels) = halfmoons::<2000>(central_radius, radius_variation, dist);
     let mut model = RBF::<2, 20>::new();
 
     const MAX_ITER: usize = 100;
-    model.train_kernels(&data[..1000], MAX_ITER);
-    let pdata: Vec<(f64, f64, f64)> = data
+    let mut rng = Marsaglia::new(12, 34, 56, 78);
+    model.train_kernels_kmeans(&mut rng, &trdata, MAX_ITER);
+    //model.train_kernels_em(&mut rng, &trdata, MAX_ITER);
+    let pdata: Vec<(f64, f64, f64)> = trdata
         .iter()
-        .zip(labels.iter())
+        .zip(trlabels.iter())
         .map(|(a, l)| (a[0], a[1], *l as f64))
         .collect();
     let centers: Vec<(f64, f64)> = model
@@ -180,13 +196,13 @@ fn rbf(dist: f64) {
     let vars: Vec<(f64, f64)> = model.kernels.iter().map(|k| (k.var[0], k.var[1])).collect();
     plot_rbf(&pdata, &centers, &vars);
 
-    //let mse = model.train_weights_lms(&data[..1000], &labels[..1000], MAX_ITER);
-    let mse = model.train_weights_rhs(&data[..1000], &labels[..1000], MAX_ITER);
+    //let mse = model.train_weights_lms(&trdata, &trlabels, MAX_ITER);
+    let mse = model.train_weights_rhs(&trdata, &trlabels, MAX_ITER);
     let title = format!("Training RBF network for dist: {dist}");
     plot_mse(&mse, &title);
     println!("{model}");
-    model.eval(&data[..1000], &labels[..1000], "Errors - Training data:");
-    model.eval(&data[1000..], &labels[1000..], "Errors - Test data:");
+    model.eval(&trdata, &trlabels, "Errors - Training data:");
+    model.eval(&tedata, &telabels, "Errors - Test data:");
 }
 
 impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
@@ -315,7 +331,107 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
         }
     }
 
-    fn train_kernels(&mut self, data: &[[f64; IDIM]], max_iter: usize) {
+    fn train_kernels_em(&mut self, rng: &mut Marsaglia, data: &[[f64; IDIM]], max_iter: usize) {
+        const EPSILON: f64 = 0.0;
+        assert!(
+            data.len() >= NKERNELS,
+            "Not enough data samples to initialize centroids."
+        );
+
+        // Initialize kernel means from the first NKERNELS data samples (assume randomised)
+        let mut global_kernel = GKernel::<IDIM>::new();
+        global_kernel.estimate_welford(data);
+
+        for _ in 0..5 {
+            let d = self.train_kernels_kmeans(rng, data, max_iter);
+            println!("KMEANS: {d}");
+        }
+        println!("KMEANS model: {self}");
+        self.weights
+            .iter_mut()
+            .for_each(|w| *w = 1.0 / NKERNELS as f64);
+
+        let mut new_kernels = [GKernel::<IDIM>::new(); NKERNELS];
+        let mut sample2gamma: Vec<[f64; NKERNELS]> = Vec::with_capacity(data.len());
+
+        for ep in 0..max_iter {
+            sample2gamma.clear();
+            // E-step
+            for x in data {
+                let mut gamma = [0.0f64; NKERNELS];
+                for i in 0..NKERNELS {
+                    gamma[i] = self.weights[i] * self.kernels[i].p(x);
+                }
+                let gsum: f64 = gamma.iter().sum();
+                if gsum > 0.0 {
+                    gamma.iter_mut().for_each(|g| *g /= gsum);
+                }
+                sample2gamma.push(gamma);
+            }
+
+            // M step - re-estimate kernels
+            let mut gksum = [0.0f64; NKERNELS];
+            for gamma in &sample2gamma {
+                for k in 0..NKERNELS {
+                    gksum[k] += gamma[k];
+                }
+            }
+            for k in 0..NKERNELS {
+                if gksum[k] > 10.0 {
+                    for (x, gamma) in data.iter().zip(sample2gamma.iter()) {
+                        new_kernels[k]
+                            .mean
+                            .iter_mut()
+                            .zip(x.iter())
+                            .for_each(|(m, e)| *m += gamma[k] * e);
+                    }
+                    new_kernels[k].mean.iter_mut().for_each(|m| *m /= gksum[k]);
+                }
+            }
+            for k in 0..NKERNELS {
+                if gksum[k] > 10.0 {
+                    for (x, gamma) in data.iter().zip(sample2gamma.iter()) {
+                        for j in 0..IDIM {
+                            new_kernels[k].var[j] +=
+                                gamma[k] * (new_kernels[k].mean[j] - x[j]).powi(2);
+                        }
+                    }
+                    new_kernels[k].var.iter_mut().for_each(|v| *v /= gksum[k]);
+                }
+                self.weights[k] = gksum[k] / data.len() as f64;
+            }
+            self.weights
+                .iter_mut()
+                .zip(self.kernels.iter_mut())
+                .for_each(|(w, k)| {
+                    if *w < 0.01 {
+                        println!("defunkt kernel {k} - reinitialising");
+                        k.reset(
+                            &data[(rng.uni() * data.len() as f64) as usize],
+                            &global_kernel.var,
+                        );
+                        *w = 1.0 / NKERNELS as f64;
+                    }
+                });
+
+            // check for convergence - distance betwen old and new kernel estimates
+            let cdist: f64 = (0..NKERNELS)
+                .map(|c| self.kernels[c].dist_euc(&new_kernels[c].mean))
+                .sum();
+            println!("Kmeans ep: {ep}; cdist: {cdist:>5.2}");
+            if cdist <= EPSILON {
+                break;
+            }
+        }
+        println!("EM model: {self}");
+    }
+
+    fn train_kernels_kmeans(
+        &mut self,
+        rng: &mut Marsaglia,
+        data: &[[f64; IDIM]],
+        max_iter: usize,
+    ) -> f64 {
         const EPSILON: f64 = 0.0;
         assert!(
             data.len() >= NKERNELS,
@@ -326,19 +442,28 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
         let mut global_kernel = GKernel::<IDIM>::new();
         global_kernel.estimate_welford(data); // please the borrow checker
         for (k, sample) in self.kernels.iter_mut().zip(data.iter().take(NKERNELS)) {
-            k.mean.copy_from_slice(sample); // use sample
-            k.var.copy_from_slice(&global_kernel.var);
+            k.reset(
+                &data[(rng.uni() * data.len() as f64) as usize],
+                &global_kernel.var,
+            );
         }
 
         let mut new_kernels = [GKernel::new(); NKERNELS];
         let mut sample2kernel: Vec<usize> = Vec::with_capacity(data.len());
 
+        let mut gdist = 0.0f64;
         for ep in 0..max_iter {
             sample2kernel.clear();
             // E-step - assign samples to their nearest cluster
-            data.iter()
+            gdist = data
+                .iter()
                 .map(|x| self.nearest_kernel(x))
-                .for_each(|(_, k)| sample2kernel.push(k));
+                .map(|(dist, k)| {
+                    sample2kernel.push(k);
+                    dist
+                })
+                .sum();
+            //.for_each(|(_, k)| sample2kernel.push(k));
 
             // M step - re-estimate kernels
             for c in 0..NKERNELS {
@@ -350,8 +475,12 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
                     .collect();
                 if dta.len() < 5 {
                     println!(
-                        "Warning: kernels{c} only has {} samples - not updating",
+                        "Warning: kernel {c} only has {} samples - resetting",
                         dta.len()
+                    );
+                    new_kernels[c].reset(
+                        &data[(rng.uni() * data.len() as f64) as usize],
+                        &global_kernel.var,
                     );
                 } else {
                     new_kernels[c].estimate_welford(&dta);
@@ -364,11 +493,12 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
             let cdist: f64 = (0..NKERNELS)
                 .map(|c| self.kernels[c].dist(&new_kernels[c].mean))
                 .sum();
-            println!("Kmeans ep: {ep}; cdist: {cdist:>5.2}");
+            println!("Kmeans ep: {ep}; gdist: {gdist:.2}; cdist: {cdist:>5.2}");
             if cdist <= EPSILON {
                 break;
             }
         }
+        gdist
     }
 
     fn nearest_kernel(&self, x: &[f64; IDIM]) -> (f64, usize) {
