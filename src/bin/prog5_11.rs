@@ -342,14 +342,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
         let mut global_kernel = GKernel::<IDIM>::new();
         global_kernel.estimate_welford(data);
 
-        for _ in 0..5 {
-            let d = self.train_kernels_kmeans(rng, data, max_iter);
-            println!("KMEANS: {d}");
-        }
-        println!("KMEANS model: {self}");
-        self.weights
-            .iter_mut()
-            .for_each(|w| *w = 1.0 / NKERNELS as f64);
+        let d = self.train_kernels_kmeans(rng, data, max_iter);
 
         let mut new_kernels = [GKernel::<IDIM>::new(); NKERNELS];
         let mut sample2gamma: Vec<[f64; NKERNELS]> = Vec::with_capacity(data.len());
@@ -463,9 +456,14 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
                     dist
                 })
                 .sum();
-            //.for_each(|(_, k)| sample2kernel.push(k));
 
             // M step - re-estimate kernels
+            let mut kcounts = [0usize;NKERNELS];
+            for k in &sample2kernel {
+                kcounts[*k] += 1;
+            }
+            self.weights.iter_mut().zip(kcounts.iter()).for_each(|(w,cnt)| *w = *cnt as f64 / data.len() as f64);
+
             for c in 0..NKERNELS {
                 let dta: Vec<[f64; IDIM]> = data
                     .iter()
