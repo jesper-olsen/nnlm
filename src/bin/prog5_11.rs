@@ -468,20 +468,36 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
                 .for_each(|(w, cnt)| *w = *cnt as f64 / data.len() as f64);
 
             for (c, k) in new_kernels.iter_mut().enumerate() {
-                let dta: Vec<[f64; IDIM]> = data
-                    .iter()
-                    .enumerate()
-                    .filter(|(i, _)| sample2kernel[*i] == c)
-                    .map(|(_, v)| *v)
-                    .collect();
                 if kcounts[c] < 5 {
-                    println!("Warning: kernel {c} only has {} samples - resetting", kcounts[c]);
+                    println!(
+                        "Warning: kernel {c} only has {} samples - resetting",
+                        kcounts[c]
+                    );
                     k.reset(
                         &data[(rng.uni() * data.len() as f64) as usize],
                         &global_kernel.var,
                     );
                 } else {
-                    k.estimate_welford(&dta);
+                    // Estimate mean and variance - Welford's method
+                    k.mean.fill(0.0);
+                    k.var.fill(0.0);
+                    let mut old_mean = [0.0f64; IDIM];
+                    data.iter()
+                        .zip(sample2kernel.iter())
+                        .filter(|(v, z)| **z == c)
+                        .map(|(v, _)| v)
+                        .enumerate()
+                        .for_each(|(i, v)| {
+                            old_mean.copy_from_slice(&k.mean);
+                            k.mean
+                                .iter_mut()
+                                .zip(v.iter())
+                                .for_each(|(m, x)| *m += (*x - *m) / (i + 1) as f64);
+                            for j in 0..IDIM {
+                                k.var[j] += (v[j] - k.mean[j]) * (v[j] - old_mean[j]);
+                            }
+                        });
+                    k.var.iter_mut().for_each(|e| *e /= (kcounts[c] - 1) as f64);
                 }
             }
 
