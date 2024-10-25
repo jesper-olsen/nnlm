@@ -103,7 +103,7 @@ impl<const IDIM: usize> GKernel<IDIM> {
 
     /// Squared Euclidian distance between x and the Gaussian kernel.
     pub fn dist_euc(&self, x: &[f64]) -> f64 {
-        assert_eq!(x.len(), IDIM);
+        debug_assert_eq!(x.len(), IDIM);
         self.mean
             .iter()
             .zip(x.iter())
@@ -113,7 +113,7 @@ impl<const IDIM: usize> GKernel<IDIM> {
 
     /// Squared Mahalanobis distance between x and the Gaussian kernel.
     pub fn dist(&self, x: &[f64]) -> f64 {
-        assert_eq!(x.len(), IDIM);
+        debug_assert_eq!(x.len(), IDIM);
         self.mean
             .iter()
             .zip(x.iter())
@@ -124,7 +124,7 @@ impl<const IDIM: usize> GKernel<IDIM> {
 
     /// Log probability of x
     pub fn logp(&self, x: &[f64]) -> f64 {
-        assert_eq!(x.len(), IDIM);
+        debug_assert_eq!(x.len(), IDIM);
         let s: f64 = self
             .var
             .iter()
@@ -135,7 +135,7 @@ impl<const IDIM: usize> GKernel<IDIM> {
 
     /// Probability of x
     pub fn p(&self, x: &[f64]) -> f64 {
-        assert_eq!(x.len(), IDIM);
+        debug_assert_eq!(x.len(), IDIM);
         let a: f64 = (2.0 * std::f64::consts::PI).powi(IDIM as i32);
         let vproduct = self.var.iter().fold(a, |acc, v| acc * v);
         (1.0 / vproduct.sqrt()) * (-0.5 * self.dist(x)).exp()
@@ -218,7 +218,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
     }
 
     pub fn output(&self, x: &[f64]) -> f64 {
-        assert_eq!(x.len(), IDIM, "Input length does not match expected IDIM");
+        debug_assert_eq!(x.len(), IDIM, "Input length does not match expected IDIM");
         self.kernels
             .iter()
             .zip(self.weights.iter())
