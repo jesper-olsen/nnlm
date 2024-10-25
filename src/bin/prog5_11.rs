@@ -181,8 +181,8 @@ fn rbf(dist: f64) {
 
     const MAX_ITER: usize = 100;
     let mut rng = Marsaglia::new(12, 34, 56, 78);
-    //model.train_kernels_kmeans(&mut rng, &trdata, MAX_ITER);
-    model.train_kernels_em(&mut rng, &trdata, MAX_ITER);
+    model.train_kernels_kmeans(&mut rng, &trdata, MAX_ITER);
+    //model.train_kernels_em(&mut rng, &trdata, MAX_ITER);
     let pdata: Vec<(f64, f64, f64)> = trdata
         .iter()
         .zip(trlabels.iter())
@@ -196,6 +196,7 @@ fn rbf(dist: f64) {
     let vars: Vec<(f64, f64)> = model.kernels.iter().map(|k| (k.var[0], k.var[1])).collect();
     plot_rbf(&pdata, &centers, &vars);
 
+    model.weights.iter_mut().for_each(|w| *w = 0.5 * rng.uni() - 0.25);
     //let mse = model.train_weights_lms(&trdata, &trlabels, MAX_ITER);
     let mse = model.train_weights_rhs(&trdata, &trlabels, MAX_ITER);
     let title = format!("Training RBF network for dist: {dist}");
@@ -370,37 +371,37 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
             }
 
             // M step - re-estimate kernels
-            let mut gksum = [0.0f64; NKERNELS];
-            for gamma in &sample2gamma {
-                gksum
-                    .iter_mut()
-                    .zip(gamma.iter())
-                    .for_each(|(s, g)| *s += g);
-            }
-            for k in 0..new_kernels.len() {
-                if gksum[k] > 10.0 {
+            let gksum = sample2gamma
+                .iter()
+                .fold([0.0f64; NKERNELS], |mut acc, gamma| {
+                    acc.iter_mut().zip(gamma.iter()).for_each(|(s, &g)| *s += g);
+                    acc
+                });
+
+            new_kernels
+                .iter_mut()
+                .enumerate()
+                .filter(|(k, knl)| gksum[*k] > 10.0)
+                .for_each(|(k, knl)| {
                     for (x, gamma) in data.iter().zip(sample2gamma.iter()) {
-                        new_kernels[k]
-                            .mean
+                        knl.mean
                             .iter_mut()
                             .zip(x.iter())
                             .for_each(|(m, e)| *m += gamma[k] * e);
                     }
-                    new_kernels[k].mean.iter_mut().for_each(|m| *m /= gksum[k]);
-                }
-            }
-            for k in 0..new_kernels.len() {
-                if gksum[k] > 10.0 {
+                    knl.mean.iter_mut().for_each(|m| *m /= gksum[k]);
+
                     for (x, gamma) in data.iter().zip(sample2gamma.iter()) {
-                        for j in 0..IDIM {
-                            new_kernels[k].var[j] +=
-                                gamma[k] * (new_kernels[k].mean[j] - x[j]).powi(2);
-                        }
+                        knl.var
+                            .iter_mut()
+                            .zip(knl.mean.iter())
+                            .zip(x.iter())
+                            .for_each(|((v, m), e)| *v += gamma[k] * (m - e).powi(2));
                     }
-                    new_kernels[k].var.iter_mut().for_each(|v| *v /= gksum[k]);
-                }
-                self.weights[k] = gksum[k] / data.len() as f64;
-            }
+                    knl.var.iter_mut().for_each(|v| *v /= gksum[k]);
+                    self.weights[k] = gksum[k] / data.len() as f64;
+                });
+
             self.weights
                 .iter_mut()
                 .zip(self.kernels.iter_mut())
