@@ -160,13 +160,13 @@ impl<const IDIM: usize, const NKERNELS: usize> fmt::Display for RBF<IDIM, NKERNE
         writeln!(f, "RBF")?;
 
         write!(f, "Weights: ")?;
-        for j in 0..NKERNELS {
-            write!(f, "{:>8.2} ", self.weights[j])?;
+        for w in self.weights {
+            write!(f, "{:>8.2} ", w)?;
         }
         writeln!(f)?;
 
-        for i in 0..NKERNELS {
-            write!(f, "{i}: {}", self.kernels[i])?;
+        for (i, k) in self.kernels.iter().enumerate() {
+            write!(f, "{i}: {}", k)?;
         }
         Ok(())
     }
@@ -181,8 +181,8 @@ fn rbf(dist: f64) {
 
     const MAX_ITER: usize = 100;
     let mut rng = Marsaglia::new(12, 34, 56, 78);
-    model.train_kernels_kmeans(&mut rng, &trdata, MAX_ITER);
-    //model.train_kernels_em(&mut rng, &trdata, MAX_ITER);
+    //model.train_kernels_kmeans(&mut rng, &trdata, MAX_ITER);
+    model.train_kernels_em(&mut rng, &trdata, MAX_ITER);
     let pdata: Vec<(f64, f64, f64)> = trdata
         .iter()
         .zip(trlabels.iter())
@@ -247,7 +247,8 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
     ) -> Vec<f64> {
         let sig = 0.01;
         let lambda = 1.0;
-        let mut p = DMatrix::identity(NKERNELS, NKERNELS) / sig;
+        let nkernels = self.kernels.len();
+        let mut p = DMatrix::identity(nkernels, nkernels) / sig;
 
         let mut lmse = Vec::<f64>::new();
         for _ep in 0..max_iter {
@@ -351,8 +352,14 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
             sample2gamma.clear();
             // E-step
             for x in data {
+                //let gamma: Vec<f64> = self
+                //    .weights
+                //    .iter()
+                //    .zip(self.kernels.iter())
+                //    .map(|(w, k)| w * k.p(x))
+                //    .collect();
                 let mut gamma = [0.0f64; NKERNELS];
-                for i in 0..NKERNELS {
+                for i in 0..gamma.len() {
                     gamma[i] = self.weights[i] * self.kernels[i].p(x);
                 }
                 let gsum: f64 = gamma.iter().sum();
@@ -365,11 +372,12 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
             // M step - re-estimate kernels
             let mut gksum = [0.0f64; NKERNELS];
             for gamma in &sample2gamma {
-                for k in 0..NKERNELS {
-                    gksum[k] += gamma[k];
-                }
+                gksum
+                    .iter_mut()
+                    .zip(gamma.iter())
+                    .for_each(|(s, g)| *s += g);
             }
-            for k in 0..NKERNELS {
+            for k in 0..new_kernels.len() {
                 if gksum[k] > 10.0 {
                     for (x, gamma) in data.iter().zip(sample2gamma.iter()) {
                         new_kernels[k]
@@ -381,7 +389,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
                     new_kernels[k].mean.iter_mut().for_each(|m| *m /= gksum[k]);
                 }
             }
-            for k in 0..NKERNELS {
+            for k in 0..new_kernels.len() {
                 if gksum[k] > 10.0 {
                     for (x, gamma) in data.iter().zip(sample2gamma.iter()) {
                         for j in 0..IDIM {
@@ -408,8 +416,11 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
                 });
 
             // check for convergence - distance betwen old and new kernel estimates
-            let cdist: f64 = (0..NKERNELS)
-                .map(|c| self.kernels[c].dist_euc(&new_kernels[c].mean))
+            let cdist: f64 = self
+                .kernels
+                .iter()
+                .zip(new_kernels.iter())
+                .map(|(k, nk)| k.dist_euc(&nk.mean))
                 .sum();
             println!("Kmeans ep: {ep}; cdist: {cdist:>5.2}");
             if cdist <= EPSILON {
@@ -458,14 +469,17 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
                 .sum();
 
             // M step - re-estimate kernels
-            let mut kcounts = [0usize; NKERNELS];
-            for k in &sample2kernel {
-                kcounts[*k] += 1;
-            }
+            let kcounts: Vec<usize> =
+                sample2kernel
+                    .iter()
+                    .fold(vec![0; self.kernels.len()], |mut acc, &k| {
+                        acc[k] += 1;
+                        acc
+                    });
             self.weights
                 .iter_mut()
                 .zip(kcounts.iter())
-                .for_each(|(w, cnt)| *w = *cnt as f64 / data.len() as f64);
+                .for_each(|(w, cnt)| *w = *cnt as f64 / sample2kernel.len() as f64);
 
             for (c, k) in new_kernels.iter_mut().enumerate() {
                 if kcounts[c] < 5 {
@@ -504,9 +518,13 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
             std::mem::swap(&mut self.kernels, &mut new_kernels);
 
             // check for convergence - distance betwen old and new kernel estimates
-            let cdist: f64 = (0..NKERNELS)
-                .map(|c| self.kernels[c].dist(&new_kernels[c].mean))
+            let cdist: f64 = self
+                .kernels
+                .iter()
+                .zip(new_kernels.iter())
+                .map(|(k, nk)| k.dist_euc(&nk.mean))
                 .sum();
+
             println!("Kmeans ep: {ep}; gdist: {gdist:.2}; cdist: {cdist:>5.2}");
             if cdist <= EPSILON {
                 break;
