@@ -1,6 +1,7 @@
 use gnuplot::{AxesCommon, Color, Figure, PointSymbol};
 //use rand::Rng;
 use stmc_rs::marsaglia::Marsaglia;
+pub mod rbf;
 
 /// Halfmoons: randomly samples two "half moons". Returns samples and their labels. Samples are 3D:
 /// 1 (bias) + 2d coordinates
