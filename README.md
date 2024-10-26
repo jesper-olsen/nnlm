@@ -17,6 +17,19 @@ Run:
 See src/bin - e.g. problem 5.11, train a Radial Basis Function network on the halfmoon classification task: 
 
 ```
+% cargo run --bin prog5_11 --release -- -h
+
+Usage: prog5_11 [OPTIONS]
+
+Options:
+  -l, --lms           Weight training: Least Mean Squares (default: Recursive Least Squares)
+  -k, --kmeans        Kernel training: k-means (default: Expectation Maximisation)
+  -d, --dist <D>      distance between halfmoons (e.g. -5.0 to 5.0) [default: -5]
+  -n, --nkernels <N>  number of RBF kernels [default: 20]
+  -h, --help          Print help
+  -V, --version       Print version
+
+```
 % cargo run --bin prog5_11
 ```
 

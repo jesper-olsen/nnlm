@@ -8,10 +8,10 @@ use stmc_rs::marsaglia::Marsaglia;
 #[command(author, version, about, long_about = None)]
 struct Args {
     #[arg(short, long = "lms", default_value_t = false)]
-    /// Weight training: Least Mean Squares (rather than Recursive Least Squares)
+    /// Weight training: Least Mean Squares (default: Recursive Least Squares)
     l: bool,
     #[arg(short, long = "kmeans", default_value_t = false)]
-    /// Kernel training: k-means (rather than Expectation Maximisation)
+    /// Kernel training: k-means (default: Expectation Maximisation)
     k: bool,
     #[arg(short, long="dist", default_value_t = -5.0)]
     ///distance between halfmoons (e.g. -5.0 to 5.0

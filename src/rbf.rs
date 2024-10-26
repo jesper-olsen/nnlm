@@ -1,7 +1,5 @@
-use gnuplot::{AxesCommon, Caption, Color, Figure, LineStyle, LineWidth, Solid};
 use na::DMatrix;
 use nalgebra as na;
-//use nnlm::*;
 use std::fmt;
 use stmc_rs::marsaglia::Marsaglia;
 
