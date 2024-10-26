@@ -151,8 +151,8 @@ impl<const IDIM: usize> GKernel<IDIM> {
 }
 
 pub struct RBF<const IDIM: usize, const NKERNELS: usize> {
-    kernels: [GKernel<IDIM>; NKERNELS],
-    weights: [f64; NKERNELS],
+    kernels: Vec<GKernel<IDIM>>,
+    weights: Vec<f64>,
 }
 
 impl<const IDIM: usize, const NKERNELS: usize> fmt::Display for RBF<IDIM, NKERNELS> {
@@ -160,7 +160,7 @@ impl<const IDIM: usize, const NKERNELS: usize> fmt::Display for RBF<IDIM, NKERNE
         writeln!(f, "RBF")?;
 
         write!(f, "Weights: ")?;
-        for w in self.weights {
+        for w in &self.weights {
             write!(f, "{:>8.2} ", w)?;
         }
         writeln!(f)?;
@@ -208,12 +208,9 @@ fn rbf(dist: f64) {
 
 impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
     pub fn new() -> Self {
-        let mut rng = Marsaglia::new(12, 34, 56, 78);
-        let mut weights = [0.0f64; NKERNELS];
-        weights.iter_mut().for_each(|w| *w = 0.5 * rng.uni() - 0.25);
         Self {
-            kernels: [GKernel::new(); NKERNELS],
-            weights,
+            kernels: vec![GKernel::new(); NKERNELS],
+            weights: vec![0.0f64;NKERNELS],
         }
     }
 
@@ -346,23 +343,19 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
 
         let d = self.train_kernels_kmeans(rng, data, max_iter);
 
-        let mut new_kernels = [GKernel::<IDIM>::new(); NKERNELS];
-        let mut sample2gamma: Vec<[f64; NKERNELS]> = Vec::with_capacity(data.len());
+        let mut new_kernels = vec![GKernel::<IDIM>::new(); NKERNELS];
+        let mut sample2gamma: Vec<Vec<f64>> = Vec::with_capacity(data.len());
 
         for ep in 0..max_iter {
             sample2gamma.clear();
             // E-step
             for x in data {
-                //let gamma: Vec<f64> = self
-                //    .weights
-                //    .iter()
-                //    .zip(self.kernels.iter())
-                //    .map(|(w, k)| w * k.p(x))
-                //    .collect();
-                let mut gamma = [0.0f64; NKERNELS];
-                for i in 0..gamma.len() {
-                    gamma[i] = self.weights[i] * self.kernels[i].p(x);
-                }
+                let mut gamma: Vec<f64> = self
+                    .weights
+                    .iter()
+                    .zip(self.kernels.iter())
+                    .map(|(w, k)| w * k.p(x))
+                    .collect();
                 let gsum: f64 = gamma.iter().sum();
                 if gsum > 0.0 {
                     gamma.iter_mut().for_each(|g| *g /= gsum);
@@ -373,7 +366,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
             // M step - re-estimate kernels
             let gksum = sample2gamma
                 .iter()
-                .fold([0.0f64; NKERNELS], |mut acc, gamma| {
+                .fold(vec![0.0f64; self.kernels.len()], |mut acc, gamma| {
                     acc.iter_mut().zip(gamma.iter()).for_each(|(s, &g)| *s += g);
                     acc
                 });
@@ -453,7 +446,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
             );
         }
 
-        let mut new_kernels = [GKernel::new(); NKERNELS];
+        let mut new_kernels = vec![GKernel::new(); NKERNELS];
         let mut sample2kernel: Vec<usize> = Vec::with_capacity(data.len());
 
         let mut gdist = 0.0f64;
