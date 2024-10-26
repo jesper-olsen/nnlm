@@ -30,7 +30,8 @@ Options:
   -V, --version       Print version
 
 ```
-% cargo run --bin prog5_11
+```
+% cargo run --bin prog5_11 --release
 ```
 
 ![PNG](https://raw.githubusercontent.com/jesper-olsen/nnlm/refs/heads/master/Assets/prog5_11_kernels.png)
