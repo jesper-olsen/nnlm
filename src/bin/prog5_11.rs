@@ -181,8 +181,8 @@ fn rbf(dist: f64) {
 
     const MAX_ITER: usize = 100;
     let mut rng = Marsaglia::new(12, 34, 56, 78);
-    model.train_kernels_kmeans(&mut rng, &trdata, MAX_ITER);
-    //model.train_kernels_em(&mut rng, &trdata, MAX_ITER);
+    //model.train_kernels_kmeans(&mut rng, &trdata, MAX_ITER);
+    model.train_kernels_em(&mut rng, &trdata, MAX_ITER);
     let pdata: Vec<(f64, f64, f64)> = trdata
         .iter()
         .zip(trlabels.iter())
@@ -395,19 +395,18 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
                     self.weights[k] = gksum[k] / data.len() as f64;
                 });
 
-            self.weights
-                .iter_mut()
-                .zip(self.kernels.iter_mut())
-                .for_each(|(w, k)| {
-                    if *w < 0.01 {
-                        println!("defunkt kernel {k} - reinitialising");
-                        k.reset(
-                            &data[(rng.uni() * data.len() as f64) as usize],
-                            &global_kernel.var,
-                        );
-                        *w = 1.0 / NKERNELS as f64;
-                    }
-                });
+            let defunkt_kernels: Vec<usize> = self.weights
+                .iter()
+                .enumerate()
+                .filter_map(|(i, &weight)| if weight < 0.01 { Some(i) } else { None })
+                .rev()
+                .collect();
+            for c in defunkt_kernels {
+                println!("defunkt kernel {c} - removing");
+                self.weights.remove(c);
+                self.kernels.remove(c);
+                new_kernels.remove(c);
+            }
 
             // check for convergence - distance betwen old and new kernel estimates
             let cdist: f64 = self
@@ -416,7 +415,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
                 .zip(new_kernels.iter())
                 .map(|(k, nk)| k.dist_euc(&nk.mean))
                 .sum();
-            println!("Kmeans ep: {ep}; cdist: {cdist:>5.2}");
+            println!("EM training - ep: {ep}; cdist: {cdist:>5.2}");
             if cdist <= EPSILON {
                 break;
             }
