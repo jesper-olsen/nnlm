@@ -1,10 +1,28 @@
+use clap::Parser;
 use gnuplot::{AxesCommon, Caption, Color, Figure, LineStyle, LineWidth, Solid};
-use stmc_rs::marsaglia::Marsaglia;
-use nnlm::{halfmoons,plot_mse};
 use nnlm::rbf::RBF;
+use nnlm::{halfmoons, plot_mse};
+use stmc_rs::marsaglia::Marsaglia;
+
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    #[arg(short, long = "lms", default_value_t = false)]
+    /// Weight training: Least Mean Squares (rather than Recursive Least Squares)
+    l: bool,
+    #[arg(short, long = "kmeans", default_value_t = false)]
+    /// Kernel training: kmeans (rather than EM)
+    k: bool,
+    #[arg(short, long="dist", default_value_t = -5.0)]
+    ///distance between halfmoons (e.g. -5.0 to 5.0
+    d: f64,
+}
 
 fn main() {
+    let args = Args::parse();
     let dist = -5.0f64;
+    let dist = args.d;
+
     let central_radius = 10.0;
     let radius_variation = 6.0;
     let (trdata, trlabels) = halfmoons::<3000>(central_radius, radius_variation, dist);
@@ -13,8 +31,11 @@ fn main() {
 
     const MAX_ITER: usize = 100;
     let mut rng = Marsaglia::new(12, 34, 56, 78);
-    //model.train_kernels_kmeans(&mut rng, &trdata, MAX_ITER);
-    model.train_kernels_em(&mut rng, &trdata, MAX_ITER);
+    if args.k {
+        model.train_kernels_kmeans(&mut rng, &trdata, MAX_ITER);
+    } else {
+        model.train_kernels_em(&mut rng, &trdata, MAX_ITER);
+    }
     let pdata: Vec<(f64, f64, f64)> = trdata
         .iter()
         .zip(trlabels.iter())
@@ -29,8 +50,11 @@ fn main() {
     plot_rbf(&pdata, &centers, &vars);
 
     //model.weights.iter_mut().for_each(|w| *w = 0.5 * rng.uni() - 0.25);
-    //let mse = model.train_weights_lms(&trdata, &trlabels, MAX_ITER);
-    let mse = model.train_weights_rhs(&trdata, &trlabels, MAX_ITER);
+    let mse = if args.l {
+        model.train_weights_lms(&trdata, &trlabels, MAX_ITER)
+    } else {
+        model.train_weights_rhs(&trdata, &trlabels, MAX_ITER)
+    };
     let title = format!("Training RBF network for dist: {dist}");
     plot_mse(&mse, &title);
     println!("{model}");

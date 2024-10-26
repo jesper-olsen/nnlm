@@ -172,12 +172,11 @@ impl<const IDIM: usize, const NKERNELS: usize> fmt::Display for RBF<IDIM, NKERNE
     }
 }
 
-
 impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
     pub fn new() -> Self {
         Self {
             kernels: vec![GKernel::new(); NKERNELS],
-            weights: vec![0.0f64;NKERNELS],
+            weights: vec![0.0f64; NKERNELS],
         }
     }
 
@@ -326,12 +325,13 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
             }
 
             // M step - re-estimate kernels
-            let gksum = sample2gamma
-                .iter()
-                .fold(vec![0.0f64; self.kernels.len()], |mut acc, gamma| {
-                    acc.iter_mut().zip(gamma.iter()).for_each(|(s, &g)| *s += g);
-                    acc
-                });
+            let gksum =
+                sample2gamma
+                    .iter()
+                    .fold(vec![0.0f64; self.kernels.len()], |mut acc, gamma| {
+                        acc.iter_mut().zip(gamma.iter()).for_each(|(s, &g)| *s += g);
+                        acc
+                    });
 
             new_kernels
                 .iter_mut()
@@ -357,7 +357,8 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
                     self.weights[k] = gksum[k] / data.len() as f64;
                 });
 
-            let defunkt_kernels: Vec<usize> = self.weights
+            let defunkt_kernels: Vec<usize> = self
+                .weights
                 .iter()
                 .enumerate()
                 .filter_map(|(i, &weight)| if weight < 0.01 { Some(i) } else { None })
@@ -385,7 +386,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
         println!("EM model: {self}");
     }
 
-    fn train_kernels_kmeans(
+    pub fn train_kernels_kmeans(
         &mut self,
         rng: &mut Marsaglia,
         data: &[[f64; IDIM]],
@@ -502,5 +503,3 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
             })
     }
 }
-
-
