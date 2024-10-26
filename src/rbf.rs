@@ -150,12 +150,12 @@ impl<const IDIM: usize> GKernel<IDIM> {
     }
 }
 
-pub struct RBF<const IDIM: usize, const NKERNELS: usize> {
+pub struct RBF<const IDIM: usize> {
     pub kernels: Vec<GKernel<IDIM>>,
     pub weights: Vec<f64>,
 }
 
-impl<const IDIM: usize, const NKERNELS: usize> fmt::Display for RBF<IDIM, NKERNELS> {
+impl<const IDIM: usize> fmt::Display for RBF<IDIM> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "RBF")?;
 
@@ -172,11 +172,11 @@ impl<const IDIM: usize, const NKERNELS: usize> fmt::Display for RBF<IDIM, NKERNE
     }
 }
 
-impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
-    pub fn new() -> Self {
+impl<const IDIM: usize> RBF<IDIM> {
+    pub fn new(nkernels: usize) -> Self {
         Self {
-            kernels: vec![GKernel::new(); NKERNELS],
-            weights: vec![0.0f64; NKERNELS],
+            kernels: vec![GKernel::new(); nkernels],
+            weights: vec![0.0f64; nkernels],
         }
     }
 
@@ -298,13 +298,13 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
 
     pub fn train_kernels_em(&mut self, rng: &mut Marsaglia, data: &[[f64; IDIM]], max_iter: usize) {
         const EPSILON: f64 = 0.0;
-        assert!(
-            data.len() >= NKERNELS,
+        debug_assert!(
+            data.len() >= self.kernels.len(),
             "Not enough data samples to initialize kernels."
         );
 
         self.train_kernels_kmeans(rng, data, max_iter);
-        let mut new_kernels = vec![GKernel::<IDIM>::new(); NKERNELS];
+        let mut new_kernels = vec![GKernel::<IDIM>::new(); self.kernels.len()];
         let mut sample2gamma: Vec<Vec<f64>> = Vec::with_capacity(data.len());
 
         for ep in 0..max_iter {
@@ -393,8 +393,8 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
         max_iter: usize,
     ) -> f64 {
         const EPSILON: f64 = 0.0;
-        assert!(
-            data.len() >= NKERNELS,
+        debug_assert!(
+            data.len() >= self.kernels.len(),
             "Not enough data samples to initialize centroids."
         );
 
@@ -408,7 +408,7 @@ impl<const IDIM: usize, const NKERNELS: usize> RBF<IDIM, NKERNELS> {
             );
         }
 
-        let mut new_kernels = vec![GKernel::new(); NKERNELS];
+        let mut new_kernels = vec![GKernel::new(); self.kernels.len()];
         let mut sample2kernel: Vec<usize> = Vec::with_capacity(data.len());
 
         let mut gdist = 0.0f64;

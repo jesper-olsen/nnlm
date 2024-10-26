@@ -11,23 +11,24 @@ struct Args {
     /// Weight training: Least Mean Squares (rather than Recursive Least Squares)
     l: bool,
     #[arg(short, long = "kmeans", default_value_t = false)]
-    /// Kernel training: kmeans (rather than EM)
+    /// Kernel training: k-means (rather than Expectation Maximisation)
     k: bool,
     #[arg(short, long="dist", default_value_t = -5.0)]
     ///distance between halfmoons (e.g. -5.0 to 5.0
     d: f64,
+    #[arg(short, long="nkernels", default_value_t = 20)]
+    ///number of RBF kernels 
+    n: usize,
 }
 
 fn main() {
     let args = Args::parse();
-    let dist = -5.0f64;
     let dist = args.d;
-
     let central_radius = 10.0;
     let radius_variation = 6.0;
     let (trdata, trlabels) = halfmoons::<3000>(central_radius, radius_variation, dist);
     let (tedata, telabels) = halfmoons::<2000>(central_radius, radius_variation, dist);
-    let mut model = RBF::<2, 20>::new();
+    let mut model = RBF::<2>::new(args.n);
 
     const MAX_ITER: usize = 100;
     let mut rng = Marsaglia::new(12, 34, 56, 78);
