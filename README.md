@@ -5,7 +5,7 @@ Rusty solutions to selected problems in [1], e.g. half moon dataset:
 
 * prog1_6: Pereptron 
 * prog2_8: Least Squares
-* prog5_11: Radial Basis Function network; kmeans + LMS/RHS training of weights
+* prog5_11: Radial Basis Function network; kmeans/EM kernel training + LMS/RHS weight training 
 
 References:
 -----------
