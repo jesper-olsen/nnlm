@@ -16,8 +16,8 @@ struct Args {
     #[arg(short, long="dist", default_value_t = -5.0)]
     ///distance between halfmoons (e.g. -5.0 to 5.0
     d: f64,
-    #[arg(short, long="nkernels", default_value_t = 20)]
-    ///number of RBF kernels 
+    #[arg(short, long = "nkernels", default_value_t = 20)]
+    ///number of RBF kernels
     n: usize,
 }
 
