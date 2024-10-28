@@ -31,7 +31,7 @@ impl<const IDIM: usize> GKernel<IDIM> {
         }
     }
 
-    pub fn reset(&mut self, mean: &[f64;IDIM], var: &[f64;IDIM]) {
+    pub fn reset(&mut self, mean: &[f64; IDIM], var: &[f64; IDIM]) {
         self.mean.copy_from_slice(mean);
         self.var.copy_from_slice(var);
     }

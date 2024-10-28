@@ -4,15 +4,15 @@ use nalgebra as na;
 use std::fmt;
 use stmc_rs::marsaglia::Marsaglia;
 
-fn clip_gradient(grad: f64, max_grad: f64) -> f64 {
-    if grad > max_grad {
-        max_grad
-    } else if grad < -max_grad {
-        -max_grad
-    } else {
-        grad
-    }
-}
+//fn clip_gradient(grad: f64, max_grad: f64) -> f64 {
+//    if grad > max_grad {
+//        max_grad
+//    } else if grad < -max_grad {
+//        -max_grad
+//    } else {
+//        grad
+//    }
+//}
 
 pub struct RBF<const IDIM: usize> {
     pub kernels: Vec<GKernel<IDIM>>,
@@ -44,7 +44,7 @@ impl<const IDIM: usize> RBF<IDIM> {
         }
     }
 
-    pub fn output(&self, x: &[f64;IDIM]) -> f64 {
+    pub fn output(&self, x: &[f64; IDIM]) -> f64 {
         self.kernels
             .iter()
             .zip(self.weights.iter())
@@ -159,96 +159,6 @@ impl<const IDIM: usize> RBF<IDIM> {
         }
     }
 
-    pub fn train_kernels_em(&mut self, rng: &mut Marsaglia, data: &[[f64; IDIM]], max_iter: usize) {
-        const EPSILON: f64 = 0.0;
-        debug_assert!(
-            data.len() >= self.kernels.len(),
-            "Not enough data samples to initialize kernels."
-        );
-
-        self.train_kernels_kmeans(rng, data, max_iter);
-        let mut new_kernels = vec![GKernel::<IDIM>::new(); self.kernels.len()];
-        let mut sample2gamma: Vec<Vec<f64>> = Vec::with_capacity(data.len());
-
-        for ep in 0..max_iter {
-            sample2gamma.clear();
-            // E-step
-            for x in data {
-                let mut gamma: Vec<f64> = self
-                    .weights
-                    .iter()
-                    .zip(self.kernels.iter())
-                    .map(|(w, k)| w * k.p(x))
-                    .collect();
-                let gsum: f64 = gamma.iter().sum();
-                if gsum > 0.0 {
-                    gamma.iter_mut().for_each(|g| *g /= gsum);
-                }
-                sample2gamma.push(gamma);
-            }
-
-            // M step - re-estimate kernels
-            let gksum =
-                sample2gamma
-                    .iter()
-                    .fold(vec![0.0f64; self.kernels.len()], |mut acc, gamma| {
-                        acc.iter_mut().zip(gamma.iter()).for_each(|(s, &g)| *s += g);
-                        acc
-                    });
-
-            new_kernels
-                .iter_mut()
-                .enumerate()
-                .filter(|(k, _)| gksum[*k] > 10.0)
-                .for_each(|(k, knl)| {
-                    for (x, gamma) in data.iter().zip(sample2gamma.iter()) {
-                        knl.mean
-                            .iter_mut()
-                            .zip(x.iter())
-                            .for_each(|(m, e)| *m += gamma[k] * e);
-                    }
-                    knl.mean.iter_mut().for_each(|m| *m /= gksum[k]);
-
-                    for (x, gamma) in data.iter().zip(sample2gamma.iter()) {
-                        knl.var
-                            .iter_mut()
-                            .zip(knl.mean.iter())
-                            .zip(x.iter())
-                            .for_each(|((v, m), e)| *v += gamma[k] * (m - e).powi(2));
-                    }
-                    knl.var.iter_mut().for_each(|v| *v /= gksum[k]);
-                    self.weights[k] = gksum[k] / data.len() as f64;
-                });
-
-            let defunkt_kernels: Vec<usize> = self
-                .weights
-                .iter()
-                .enumerate()
-                .filter_map(|(i, &weight)| if weight < 0.01 { Some(i) } else { None })
-                .rev()
-                .collect();
-            for c in defunkt_kernels {
-                println!("defunkt kernel {c} - removing");
-                self.weights.remove(c);
-                self.kernels.remove(c);
-                new_kernels.remove(c);
-            }
-
-            // check for convergence - distance betwen old and new kernel estimates
-            let cdist: f64 = self
-                .kernels
-                .iter()
-                .zip(new_kernels.iter())
-                .map(|(k, nk)| k.dist_euc(&nk.mean))
-                .sum();
-            println!("EM training - ep: {ep}; cdist: {cdist:>5.2}");
-            if cdist <= EPSILON {
-                break;
-            }
-        }
-        println!("EM model: {self}");
-    }
-
     pub fn train_kernels_kmeans(
         &mut self,
         rng: &mut Marsaglia,
@@ -261,9 +171,9 @@ impl<const IDIM: usize> RBF<IDIM> {
             "Not enough data samples to initialize centroids."
         );
 
-        // Initialize kernel means from the first nkernels data samples (assume randomised)
+        // Initialize kernel means using random samples
         let mut global_kernel = GKernel::<IDIM>::new();
-        global_kernel.estimate(data); // please the borrow checker
+        global_kernel.estimate(data);
         for k in &mut self.kernels {
             k.reset(
                 &data[(rng.uni() * data.len() as f64) as usize],
@@ -364,5 +274,95 @@ impl<const IDIM: usize> RBF<IDIM> {
                     (min_dist, min_pos)
                 }
             })
+    }
+
+    pub fn train_kernels_em(&mut self, rng: &mut Marsaglia, data: &[[f64; IDIM]], max_iter: usize) {
+        const EPSILON: f64 = 0.0;
+        debug_assert!(
+            data.len() >= self.kernels.len(),
+            "Not enough data samples to initialize kernels."
+        );
+
+        self.train_kernels_kmeans(rng, data, max_iter);
+        let mut new_kernels = vec![GKernel::<IDIM>::new(); self.kernels.len()];
+        let mut sample2gamma: Vec<Vec<f64>> = Vec::with_capacity(data.len());
+
+        for ep in 0..max_iter {
+            sample2gamma.clear();
+            // E-step
+            for x in data {
+                let mut gamma: Vec<f64> = self
+                    .weights
+                    .iter()
+                    .zip(self.kernels.iter())
+                    .map(|(w, k)| w * k.p(x))
+                    .collect();
+                let gsum: f64 = gamma.iter().sum();
+                if gsum > 0.0 {
+                    gamma.iter_mut().for_each(|g| *g /= gsum);
+                }
+                sample2gamma.push(gamma);
+            }
+
+            // M step - re-estimate kernels
+            let gksum =
+                sample2gamma
+                    .iter()
+                    .fold(vec![0.0f64; self.kernels.len()], |mut acc, gamma| {
+                        acc.iter_mut().zip(gamma.iter()).for_each(|(s, &g)| *s += g);
+                        acc
+                    });
+
+            new_kernels
+                .iter_mut()
+                .enumerate()
+                .filter(|(k, _)| gksum[*k] > 10.0)
+                .for_each(|(k, knl)| {
+                    for (x, gamma) in data.iter().zip(sample2gamma.iter()) {
+                        knl.mean
+                            .iter_mut()
+                            .zip(x.iter())
+                            .for_each(|(m, e)| *m += gamma[k] * e);
+                    }
+                    knl.mean.iter_mut().for_each(|m| *m /= gksum[k]);
+
+                    for (x, gamma) in data.iter().zip(sample2gamma.iter()) {
+                        knl.var
+                            .iter_mut()
+                            .zip(knl.mean.iter())
+                            .zip(x.iter())
+                            .for_each(|((v, m), e)| *v += gamma[k] * (m - e).powi(2));
+                    }
+                    knl.var.iter_mut().for_each(|v| *v /= gksum[k]);
+                    self.weights[k] = gksum[k] / data.len() as f64;
+                });
+
+            let defunkt_kernels: Vec<usize> = self
+                .weights
+                .iter()
+                .enumerate()
+                .filter_map(|(i, &weight)| if weight < 0.01 { Some(i) } else { None })
+                .rev()
+                .collect();
+            for c in defunkt_kernels {
+                println!("defunkt kernel {c} - removing");
+                self.weights.remove(c);
+                self.kernels.remove(c);
+                new_kernels.remove(c);
+            }
+
+            // check for convergence - distance betwen old and new kernel estimates
+            let cdist: f64 = self
+                .kernels
+                .iter()
+                .zip(new_kernels.iter())
+                .map(|(k, nk)| k.dist_euc(&nk.mean))
+                .sum();
+            println!("EM training - ep: {ep}; cdist: {cdist:>5.2}");
+            if cdist <= EPSILON {
+                break;
+            }
+        }
+        println!("EM model: {self}");
     }
 }
