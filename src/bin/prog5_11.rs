@@ -1,7 +1,7 @@
-use log::LevelFilter;
-use env_logger;
 use clap::Parser;
+use env_logger;
 use gnuplot::{AxesCommon, Caption, Color, Figure, LineStyle, LineWidth, Solid};
+use log::{info, LevelFilter};
 use nnlm::rbf::RBF;
 use nnlm::{halfmoons, plot_mse};
 use stmc_rs::marsaglia::Marsaglia;
@@ -21,51 +21,6 @@ struct Args {
     #[arg(short, long = "nkernels", default_value_t = 20)]
     ///number of RBF kernels
     n: usize,
-}
-
-fn main() {
-    env_logger::Builder::new()
-        .filter_level(LevelFilter::Info)
-        .init();
-    let args = Args::parse();
-    let dist = args.d;
-    let central_radius = 10.0;
-    let radius_variation = 6.0;
-    let (trdata, trlabels) = halfmoons::<3000>(central_radius, radius_variation, dist);
-    let (tedata, telabels) = halfmoons::<2000>(central_radius, radius_variation, dist);
-    let mut model = RBF::<2>::new(args.n);
-
-    const MAX_ITER: usize = 100;
-    let mut rng = Marsaglia::new(12, 34, 56, 78);
-    if args.k {
-        model.train_kernels_kmeans(&mut rng, &trdata, MAX_ITER);
-    } else {
-        model.train_kernels_em(&mut rng, &trdata, MAX_ITER);
-    }
-    let pdata: Vec<(f64, f64, f64)> = trdata
-        .iter()
-        .zip(trlabels.iter())
-        .map(|(a, l)| (a[0], a[1], *l as f64))
-        .collect();
-    let centers: Vec<(f64, f64)> = model
-        .kernels
-        .iter()
-        .map(|k| (k.mean[0], k.mean[1]))
-        .collect();
-    let vars: Vec<(f64, f64)> = model.kernels.iter().map(|k| (k.var[0], k.var[1])).collect();
-    plot_rbf(&pdata, &centers, &vars);
-
-    //model.weights.iter_mut().for_each(|w| *w = 0.5 * rng.uni() - 0.25);
-    let mse = if args.l {
-        model.train_weights_lms(&trdata, &trlabels, MAX_ITER)
-    } else {
-        model.train_weights_rhs(&trdata, &trlabels, MAX_ITER)
-    };
-    let title = format!("Training RBF network for dist: {dist}");
-    plot_mse(&mse, &title);
-    println!("{model}");
-    model.eval(&trdata, &trlabels, "Errors - Training data:");
-    model.eval(&tedata, &telabels, "Errors - Test data:");
 }
 
 fn plot_rbf(
@@ -136,4 +91,48 @@ fn plot_rbf(
     }
 
     fg.show().unwrap();
+}
+fn main() {
+    env_logger::Builder::new()
+        .filter_level(LevelFilter::Info)
+        .init();
+    let args = Args::parse();
+    let dist = args.d;
+    let central_radius = 10.0;
+    let radius_variation = 6.0;
+    let (trdata, trlabels) = halfmoons::<3000>(central_radius, radius_variation, dist);
+    let (tedata, telabels) = halfmoons::<2000>(central_radius, radius_variation, dist);
+    let mut model = RBF::<2>::new(args.n);
+
+    const MAX_ITER: usize = 100;
+    let mut rng = Marsaglia::new(12, 34, 56, 78);
+    if args.k {
+        model.train_kernels_kmeans(&mut rng, &trdata, MAX_ITER);
+    } else {
+        model.train_kernels_em(&mut rng, &trdata, MAX_ITER);
+    }
+    let pdata: Vec<(f64, f64, f64)> = trdata
+        .iter()
+        .zip(trlabels.iter())
+        .map(|(a, l)| (a[0], a[1], *l as f64))
+        .collect();
+    let centers: Vec<(f64, f64)> = model
+        .kernels
+        .iter()
+        .map(|k| (k.mean[0], k.mean[1]))
+        .collect();
+    let vars: Vec<(f64, f64)> = model.kernels.iter().map(|k| (k.var[0], k.var[1])).collect();
+    plot_rbf(&pdata, &centers, &vars);
+
+    //model.weights.iter_mut().for_each(|w| *w = 0.5 * rng.uni() - 0.25);
+    let mse = if args.l {
+        model.train_weights_lms(&trdata, &trlabels, MAX_ITER)
+    } else {
+        model.train_weights_rhs(&trdata, &trlabels, MAX_ITER)
+    };
+    let title = format!("Training RBF network for dist: {dist}");
+    plot_mse(&mse, &title);
+    println!("{model}");
+    model.eval(&trdata, &trlabels, "Errors - Training data:");
+    model.eval(&tedata, &telabels, "Errors - Test data:");
 }

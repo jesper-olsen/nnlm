@@ -1,5 +1,5 @@
-use log::{info, warn};
 use crate::kernel::GKernel;
+use log::{info, warn};
 use na::DMatrix;
 use nalgebra as na;
 use std::fmt;
@@ -156,6 +156,76 @@ impl<const IDIM: usize> RBF<IDIM> {
         }
     }
 
+    fn kmeans_step(
+        &mut self,
+        data: &[[f64; IDIM]],
+        new_kernels: &mut Vec<GKernel<IDIM>>,
+        sample2kernel: &mut Vec<usize>,
+    ) -> f64 {
+        sample2kernel.clear();
+
+        // E-step - assign samples to their nearest cluster
+        data.iter()
+            .map(|x| self.nearest_kernel(x))
+            .for_each(|(_, k)| sample2kernel.push(k));
+
+        // M step - re-estimate kernels
+        let kcounts: Vec<usize> =
+            sample2kernel
+                .iter()
+                .fold(vec![0; self.kernels.len()], |mut acc, &k| {
+                    acc[k] += 1;
+                    acc
+                });
+        self.weights
+            .iter_mut()
+            .zip(kcounts.iter())
+            .for_each(|(w, cnt)| *w = *cnt as f64 / sample2kernel.len() as f64);
+
+        for (c, k) in new_kernels.iter_mut().enumerate() {
+            self.weights[c] = kcounts[c] as f64 / data.len() as f64;
+            if kcounts[c] > 1 {
+                // Estimate mean and variance - Welford's method
+                k.mean.fill(0.0);
+                k.var.fill(0.0);
+                let mut old_mean = [0.0f64; IDIM];
+                data.iter()
+                    .zip(sample2kernel.iter())
+                    .filter(|(_, z)| **z == c)
+                    .map(|(v, _)| v)
+                    .enumerate()
+                    .for_each(|(i, v)| {
+                        old_mean.copy_from_slice(&k.mean);
+                        k.mean
+                            .iter_mut()
+                            .zip(v.iter())
+                            .for_each(|(m, x)| *m += (*x - *m) / (i + 1) as f64);
+                        for j in 0..IDIM {
+                            k.var[j] += (v[j] - k.mean[j]) * (v[j] - old_mean[j]);
+                        }
+                    });
+                k.var.iter_mut().for_each(|e| *e /= (kcounts[c] - 1) as f64);
+            }
+        }
+        std::mem::swap(&mut self.kernels, new_kernels);
+        self.remove_defunkt_kernels(new_kernels);
+
+        // check for convergence - distance betwen old and new kernel estimates
+        self.kernels
+            .iter()
+            .zip(new_kernels.iter())
+            .map(|(k, nk)| k.dist_euc(&nk.mean))
+            .sum::<f64>()
+    }
+
+    pub fn train_kernels_kmeans_hierarchical(
+        &mut self,
+        rng: &mut Marsaglia,
+        data: &[[f64; IDIM]],
+        max_iter: usize,
+    ) {
+    }
+
     pub fn train_kernels_kmeans(
         &mut self,
         rng: &mut Marsaglia,
@@ -182,75 +252,8 @@ impl<const IDIM: usize> RBF<IDIM> {
         let mut sample2kernel: Vec<usize> = Vec::with_capacity(data.len());
 
         for ep in 0..max_iter {
-            sample2kernel.clear();
-            // E-step - assign samples to their nearest cluster
-            let gdist: f64 = data
-                .iter()
-                .map(|x| self.nearest_kernel(x))
-                .map(|(dist, k)| {
-                    sample2kernel.push(k);
-                    dist
-                })
-                .sum();
-
-            // M step - re-estimate kernels
-            let kcounts: Vec<usize> =
-                sample2kernel
-                    .iter()
-                    .fold(vec![0; self.kernels.len()], |mut acc, &k| {
-                        acc[k] += 1;
-                        acc
-                    });
-            self.weights
-                .iter_mut()
-                .zip(kcounts.iter())
-                .for_each(|(w, cnt)| *w = *cnt as f64 / sample2kernel.len() as f64);
-
-            for (c, k) in new_kernels.iter_mut().enumerate() {
-                if kcounts[c] < 5 {
-                    warn!(
-                        "Warning: kernel {c} only has {} samples - resetting",
-                        kcounts[c]
-                    );
-                    k.reset(
-                        &data[(rng.uni() * data.len() as f64) as usize],
-                        &global_kernel.var,
-                    );
-                } else {
-                    // Estimate mean and variance - Welford's method
-                    k.mean.fill(0.0);
-                    k.var.fill(0.0);
-                    let mut old_mean = [0.0f64; IDIM];
-                    data.iter()
-                        .zip(sample2kernel.iter())
-                        .filter(|(_, z)| **z == c)
-                        .map(|(v, _)| v)
-                        .enumerate()
-                        .for_each(|(i, v)| {
-                            old_mean.copy_from_slice(&k.mean);
-                            k.mean
-                                .iter_mut()
-                                .zip(v.iter())
-                                .for_each(|(m, x)| *m += (*x - *m) / (i + 1) as f64);
-                            for j in 0..IDIM {
-                                k.var[j] += (v[j] - k.mean[j]) * (v[j] - old_mean[j]);
-                            }
-                        });
-                    k.var.iter_mut().for_each(|e| *e /= (kcounts[c] - 1) as f64);
-                }
-            }
-
-            std::mem::swap(&mut self.kernels, &mut new_kernels);
-
-            // check for convergence - distance betwen old and new kernel estimates
-            let cdist: f64 = self
-                .kernels
-                .iter()
-                .zip(new_kernels.iter())
-                .map(|(k, nk)| k.dist_euc(&nk.mean))
-                .sum();
-
-            info!("Kmeans ep: {ep}; gdist: {gdist:.2}; cdist: {cdist:>5.2}");
+            let cdist = self.kmeans_step(data, &mut new_kernels, &mut sample2kernel);
+            info!("Kmeans ep: {ep}; gdist: cdist: {cdist:>5.2}");
             if cdist <= EPSILON {
                 break;
             }
@@ -269,6 +272,22 @@ impl<const IDIM: usize> RBF<IDIM> {
                     (min_dist, min_pos)
                 }
             })
+    }
+
+    fn remove_defunkt_kernels(&mut self, new_kernels: &mut Vec<GKernel<IDIM>>) {
+        let defunkt_kernels: Vec<usize> = self
+            .weights
+            .iter()
+            .enumerate()
+            .filter_map(|(i, &weight)| if weight < 0.01 { Some(i) } else { None })
+            .rev()
+            .collect();
+        for c in defunkt_kernels {
+            warn!("defunkt kernel {c} - removing");
+            self.weights.remove(c);
+            self.kernels.remove(c);
+            new_kernels.remove(c);
+        }
     }
 
     pub fn train_kernels_em(&mut self, rng: &mut Marsaglia, data: &[[f64; IDIM]], max_iter: usize) {
@@ -332,19 +351,7 @@ impl<const IDIM: usize> RBF<IDIM> {
                     self.weights[k] = gksum[k] / data.len() as f64;
                 });
 
-            let defunkt_kernels: Vec<usize> = self
-                .weights
-                .iter()
-                .enumerate()
-                .filter_map(|(i, &weight)| if weight < 0.01 { Some(i) } else { None })
-                .rev()
-                .collect();
-            for c in defunkt_kernels {
-                warn!("defunkt kernel {c} - removing");
-                self.weights.remove(c);
-                self.kernels.remove(c);
-                new_kernels.remove(c);
-            }
+            self.remove_defunkt_kernels(&mut new_kernels);
 
             // check for convergence - distance betwen old and new kernel estimates
             let cdist: f64 = self
