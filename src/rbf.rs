@@ -50,18 +50,14 @@ impl<const IDIM: usize> RBF<IDIM> {
             .zip(self.weights.iter())
             .map(|(&k, &w)| w * k.p(x))
             .sum::<f64>()
-            .signum()
     }
 
     pub fn eval(&self, data: &[[f64; IDIM]], labels: &[i8], title: &str) {
-        let mut errors = 0;
-        for (x, label) in data.iter().zip(labels) {
-            let y = self.output(x) as i8;
-            let d = label.signum();
-            if d != y {
-                errors += 1
-            }
-        }
+        let errors: usize = data
+            .iter()
+            .zip(labels)
+            .filter(|(x, label)| label.signum() != self.output(x).signum() as i8)
+            .count();
         let errp = 100.0 * errors as f64 / data.len() as f64;
         println!("{title}: {errors}/{} = {errp:>6.2}%", data.len());
     }
