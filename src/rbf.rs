@@ -1,3 +1,4 @@
+use log::{info, warn};
 use crate::kernel::GKernel;
 use na::DMatrix;
 use nalgebra as na;
@@ -59,7 +60,7 @@ impl<const IDIM: usize> RBF<IDIM> {
             .filter(|(x, label)| label.signum() != self.output(x).signum() as i8)
             .count();
         let errp = 100.0 * errors as f64 / data.len() as f64;
-        println!("{title}: {errors}/{} = {errp:>6.2}%", data.len());
+        info!("{title}: {errors}/{} = {errp:>6.2}%", data.len());
     }
 
     pub fn train_weights_rhs(
@@ -160,7 +161,7 @@ impl<const IDIM: usize> RBF<IDIM> {
         rng: &mut Marsaglia,
         data: &[[f64; IDIM]],
         max_iter: usize,
-    ) -> f64 {
+    ) {
         const EPSILON: f64 = 0.0;
         debug_assert!(
             data.len() >= self.kernels.len(),
@@ -180,11 +181,10 @@ impl<const IDIM: usize> RBF<IDIM> {
         let mut new_kernels = vec![GKernel::new(); self.kernels.len()];
         let mut sample2kernel: Vec<usize> = Vec::with_capacity(data.len());
 
-        let mut gdist = 0.0f64;
         for ep in 0..max_iter {
             sample2kernel.clear();
             // E-step - assign samples to their nearest cluster
-            gdist = data
+            let gdist: f64 = data
                 .iter()
                 .map(|x| self.nearest_kernel(x))
                 .map(|(dist, k)| {
@@ -208,7 +208,7 @@ impl<const IDIM: usize> RBF<IDIM> {
 
             for (c, k) in new_kernels.iter_mut().enumerate() {
                 if kcounts[c] < 5 {
-                    println!(
+                    warn!(
                         "Warning: kernel {c} only has {} samples - resetting",
                         kcounts[c]
                     );
@@ -250,12 +250,11 @@ impl<const IDIM: usize> RBF<IDIM> {
                 .map(|(k, nk)| k.dist_euc(&nk.mean))
                 .sum();
 
-            println!("Kmeans ep: {ep}; gdist: {gdist:.2}; cdist: {cdist:>5.2}");
+            info!("Kmeans ep: {ep}; gdist: {gdist:.2}; cdist: {cdist:>5.2}");
             if cdist <= EPSILON {
                 break;
             }
         }
-        gdist
     }
 
     fn nearest_kernel(&self, x: &[f64; IDIM]) -> (f64, usize) {
@@ -341,7 +340,7 @@ impl<const IDIM: usize> RBF<IDIM> {
                 .rev()
                 .collect();
             for c in defunkt_kernels {
-                println!("defunkt kernel {c} - removing");
+                warn!("defunkt kernel {c} - removing");
                 self.weights.remove(c);
                 self.kernels.remove(c);
                 new_kernels.remove(c);
@@ -354,11 +353,10 @@ impl<const IDIM: usize> RBF<IDIM> {
                 .zip(new_kernels.iter())
                 .map(|(k, nk)| k.dist_euc(&nk.mean))
                 .sum();
-            println!("EM training - ep: {ep}; cdist: {cdist:>5.2}");
+            info!("EM training - ep: {ep}; cdist: {cdist:>5.2}");
             if cdist <= EPSILON {
                 break;
             }
         }
-        println!("EM model: {self}");
     }
 }

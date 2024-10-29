@@ -1,3 +1,5 @@
+use log::LevelFilter;
+use env_logger;
 use clap::Parser;
 use gnuplot::{AxesCommon, Caption, Color, Figure, LineStyle, LineWidth, Solid};
 use nnlm::rbf::RBF;
@@ -22,6 +24,9 @@ struct Args {
 }
 
 fn main() {
+    env_logger::Builder::new()
+        .filter_level(LevelFilter::Info)
+        .init();
     let args = Args::parse();
     let dist = args.d;
     let central_radius = 10.0;
