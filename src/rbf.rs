@@ -41,7 +41,7 @@ impl<const IDIM: usize> RBF<IDIM> {
     pub fn new(nkernels: usize) -> Self {
         Self {
             kernels: vec![GKernel::new(); nkernels],
-            weights: vec![0.0f64; nkernels],
+            weights: vec![1.0f64; nkernels],
         }
     }
 
@@ -233,33 +233,26 @@ impl<const IDIM: usize> RBF<IDIM> {
 
 
     /// initialise with dispearsed random samples (kmeans++)
-    fn initialise_kernels_kmeanspp(&mut self, rng: &mut Marsaglia, nkernels: usize, data: &[[f64; IDIM]]) {
+    fn initialise_kernels_kmeanspp(&mut self, rng: &mut Marsaglia, data: &[[f64; IDIM]]) {
         let mut global_kernel = GKernel::<IDIM>::new();
         global_kernel.estimate(data);
-        self.kernels.clear();
-        let mut k = GKernel::<IDIM>::new();
-        k.reset(&data[(rng.uni() * data.len() as f64) as usize], &global_kernel.var);
-        self.kernels.push(k);
+
+        self.kernels[0].reset(&data[(rng.uni() * data.len() as f64) as usize], &global_kernel.var);
         
         // from sample to to closest kernel 
         let mut min_distances = Vec::with_capacity(data.len());
 
-        for _ in 1..nkernels {
+        for k in 1..self.kernels.len() {
             min_distances.clear();
             data.iter()
                 .map(|x| self.nearest_kernel(x))
                 .for_each(|(d, _)| min_distances.push(d));
-
-            let total_distance: f64 = min_distances.iter().sum();
-            let target: f64 = rng.uni() * total_distance;
-            let mut cumulative_distance = 0.0;
-
-            for (i,&distance) in min_distances.iter().enumerate() {
-                cumulative_distance += distance;
-                if cumulative_distance>=target {
-                    let mut k = GKernel::<IDIM>::new();
-                    k.reset(&data[i], &global_kernel.var);
-                    self.kernels.push(k);
+            let target: f64 = rng.uni() * min_distances.iter().sum::<f64>();
+            let mut cd= 0.0;
+            for (i,&d) in min_distances.iter().enumerate() {
+                cd += d;
+                if cd>=target {
+                    self.kernels[k].reset(&data[i], &global_kernel.var);
                     break
                 }
             }
@@ -279,7 +272,7 @@ impl<const IDIM: usize> RBF<IDIM> {
         );
 
         //self.initialise_kernels_kmeans(rng, data);
-        self.initialise_kernels_kmeanspp(rng, self.kernels.len(), data);
+        self.initialise_kernels_kmeanspp(rng, data);
 
         let mut new_kernels = vec![GKernel::new(); self.kernels.len()];
         let mut sample2kernel: Vec<usize> = Vec::with_capacity(data.len());
@@ -399,7 +392,7 @@ impl<const IDIM: usize> RBF<IDIM> {
             "Not enough data samples to initialize kernels."
         );
 
-        self.train_kernels_kmeans(rng, data, max_iter);
+        self.initialise_kernels_kmeanspp(rng, data);
         let mut new_kernels = vec![GKernel::<IDIM>::new(); self.kernels.len()];
         let mut sample2gamma: Vec<Vec<f64>> = Vec::with_capacity(data.len());
 

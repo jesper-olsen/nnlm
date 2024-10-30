@@ -133,6 +133,7 @@ fn main() {
     let title = format!("Training RBF network for dist: {dist}");
     plot_mse(&mse, &title);
     println!("{model}");
+    println!("Kernels specified: {} actual: {}", args.n, model.kernels.len());
     model.eval(&trdata, &trlabels, "Errors - Training data:");
     model.eval(&tedata, &telabels, "Errors - Test data:");
 }
