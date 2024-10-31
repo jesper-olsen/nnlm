@@ -107,9 +107,9 @@ fn main() {
     const MAX_ITER: usize = 100;
     let mut rng = Marsaglia::new(12, 34, 56, 78);
     if args.k {
-        model.train_kernels_kmeans(&mut rng, &trdata, MAX_ITER);
+        model.gmm.train_kernels_kmeans(&mut rng, &trdata, MAX_ITER);
     } else {
-        model.train_kernels_em(&mut rng, &trdata, MAX_ITER);
+        model.gmm.train_kernels_em(&mut rng, &trdata, MAX_ITER);
     }
     let pdata: Vec<(f64, f64, f64)> = trdata
         .iter()
@@ -117,11 +117,11 @@ fn main() {
         .map(|(a, l)| (a[0], a[1], *l as f64))
         .collect();
     let centers: Vec<(f64, f64)> = model
-        .kernels
+        .gmm.kernels
         .iter()
         .map(|k| (k.mean[0], k.mean[1]))
         .collect();
-    let vars: Vec<(f64, f64)> = model.kernels.iter().map(|k| (k.var[0], k.var[1])).collect();
+    let vars: Vec<(f64, f64)> = model.gmm.kernels.iter().map(|k| (k.var[0], k.var[1])).collect();
     plot_rbf(&pdata, &centers, &vars);
 
     //model.weights.iter_mut().for_each(|w| *w = 0.5 * rng.uni() - 0.25);
@@ -133,11 +133,6 @@ fn main() {
     let title = format!("Training RBF network for dist: {dist}");
     plot_mse(&mse, &title);
     println!("{model}");
-    println!(
-        "Kernels specified: {} actual: {}",
-        args.n,
-        model.kernels.len()
-    );
     model.eval(&trdata, &trlabels, "Errors - Training data:");
     model.eval(&tedata, &telabels, "Errors - Test data:");
 }
