@@ -18,6 +18,9 @@ struct Args {
     #[arg(short, long="dist", default_value_t = -5.0)]
     ///distance between halfmoons (e.g. -5.0 to 5.0
     d: f64,
+    #[arg(short, long="seed", default_value_t = 12)]
+    ///seed rng 
+    s: i32,
     #[arg(short, long = "nkernels", default_value_t = 20)]
     ///number of RBF kernels
     n: usize,
@@ -105,7 +108,8 @@ fn main() {
     let mut model = RBF::<2>::new(args.n);
 
     const MAX_ITER: usize = 100;
-    let mut rng = Marsaglia::new(12, 34, 56, 78);
+    //let mut rng = Marsaglia::new(12, 34, 56, 78);
+    let mut rng = Marsaglia::new(args.s, 34, 56, 78);
     if args.k {
         model.gmm.train_kernels_kmeans(&mut rng, &trdata, MAX_ITER);
     } else {
