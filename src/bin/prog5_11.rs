@@ -13,13 +13,16 @@ struct Args {
     /// Weight training: Least Mean Squares (default: Recursive Least Squares)
     l: bool,
     #[arg(short, long = "kmeans", default_value_t = false)]
-    /// Kernel training: k-means (default: Expectation Maximisation)
+    /// Kernel training: k-means (default: EM, kmeans++)
     k: bool,
+    #[arg(short, long = "hierarchical", default_value_t = false)]
+    /// Kernel training: Expectation Maximisation, binary splitting (default: EM, kmeans++)
+    b: bool,
     #[arg(short, long="dist", default_value_t = -5.0)]
     ///distance between halfmoons (e.g. -5.0 to 5.0
     d: f64,
-    #[arg(short, long="seed", default_value_t = 12)]
-    ///seed rng 
+    #[arg(short, long = "seed", default_value_t = 12)]
+    ///seed rng
     s: i32,
     #[arg(short, long = "nkernels", default_value_t = 20)]
     ///number of RBF kernels
@@ -112,6 +115,10 @@ fn main() {
     let mut rng = Marsaglia::new(args.s, 34, 56, 78);
     if args.k {
         model.gmm.train_kernels_kmeans(&mut rng, &trdata, MAX_ITER);
+    } else if args.b {
+        model
+            .gmm
+            .train_kernels_hierarchical(&mut rng, &trdata, MAX_ITER);
     } else {
         model.gmm.train_kernels_em(&mut rng, &trdata, MAX_ITER);
     }
@@ -121,11 +128,17 @@ fn main() {
         .map(|(a, l)| (a[0], a[1], *l as f64))
         .collect();
     let centers: Vec<(f64, f64)> = model
-        .gmm.kernels
+        .gmm
+        .kernels
         .iter()
         .map(|k| (k.mean[0], k.mean[1]))
         .collect();
-    let vars: Vec<(f64, f64)> = model.gmm.kernels.iter().map(|k| (k.var[0], k.var[1])).collect();
+    let vars: Vec<(f64, f64)> = model
+        .gmm
+        .kernels
+        .iter()
+        .map(|k| (k.var[0], k.var[1]))
+        .collect();
     plot_rbf(&pdata, &centers, &vars);
 
     //model.weights.iter_mut().for_each(|w| *w = 0.5 * rng.uni() - 0.25);

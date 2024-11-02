@@ -1,9 +1,8 @@
-use log::{info, warn};
+use crate::gmm::GMM;
+use log::info;
 use na::DMatrix;
 use nalgebra as na;
 use std::fmt;
-use crate::gmm::GMM;
-use stmc_rs::marsaglia::Marsaglia;
 
 //fn clip_gradient(grad: f64, max_grad: f64) -> f64 {
 //    if grad > max_grad {
@@ -36,11 +35,10 @@ impl<const IDIM: usize> fmt::Display for RBF<IDIM> {
     }
 }
 
-
 impl<const IDIM: usize> RBF<IDIM> {
     pub fn new(nkernels: usize) -> Self {
         Self {
-            gmm: GMM::new(nkernels)
+            gmm: GMM::new(nkernels),
         }
     }
 
@@ -86,7 +84,8 @@ impl<const IDIM: usize> RBF<IDIM> {
                     .sum::<f64>();
                 let kk = pai / (lambda + g_t_pai);
 
-                let e = d - self.gmm
+                let e = d - self
+                    .gmm
                     .weights
                     .iter()
                     .zip(&k)
@@ -130,7 +129,8 @@ impl<const IDIM: usize> RBF<IDIM> {
                 let e = d - y;
 
                 mse += e * e;
-                self.gmm.weights
+                self.gmm
+                    .weights
                     .iter_mut()
                     .zip(k.iter())
                     .map(|(w, ki)| (w, lr * e * ki))

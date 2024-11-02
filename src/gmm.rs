@@ -29,7 +29,7 @@ impl<const IDIM: usize> GMM<IDIM> {
     pub fn new(nkernels: usize) -> Self {
         Self {
             kernels: vec![GKernel::new(); nkernels],
-            weights: vec![1.0f64/nkernels as f64; nkernels],
+            weights: vec![1.0f64 / nkernels as f64; nkernels],
         }
     }
 
@@ -96,25 +96,53 @@ impl<const IDIM: usize> GMM<IDIM> {
         self.check_convergence(new_kernels)
     }
 
-    pub fn train_kernels_kmeans_hierarchical(
+    fn largest_mixture(&self) -> usize {
+        let (i, _) = self
+            .weights
+            .iter()
+            .enumerate()
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
+            .unwrap();
+        i
+    }
+
+    pub fn train_kernels_hierarchical(
         &mut self,
         rng: &mut Marsaglia,
         data: &[[f64; IDIM]],
         max_iter: usize,
     ) {
+        let nkernels = self.kernels.len();
+        self.kernels.drain(1..nkernels);
+        self.weights.drain(1..nkernels);
+        self.kernels[0].estimate(data);
+        self.weights[0] = 1.0;
+        // split the kernel with the largest weight in each iteration
+        // Limit number of iterations - because of defunkt mixtures
+        for _ in 0..2 * nkernels {
+            if self.kernels.len() >= nkernels {
+                break;
+            }
+            let i = self.largest_mixture();
+            let k = self.kernels[i].split(rng);
+            self.kernels.push(k);
+            self.weights[i] /= 2.0;
+            self.weights.push(self.weights[i]);
+            self.train_kernels_em(rng, data, max_iter);
+        }
     }
 
     /// initialise with random samples
-    fn initialise_kernels_kmeans(&mut self, rng: &mut Marsaglia, data: &[[f64; IDIM]]) {
-        let mut global_kernel = GKernel::<IDIM>::new();
-        global_kernel.estimate(data);
-        for k in &mut self.kernels {
-            k.reset(
-                &data[(rng.uni() * data.len() as f64) as usize],
-                &global_kernel.var,
-            );
-        }
-    }
+    // fn initialise_kernels_kmeans(&mut self, rng: &mut Marsaglia, data: &[[f64; IDIM]]) {
+    //     let mut global_kernel = GKernel::<IDIM>::new();
+    //     global_kernel.estimate(data);
+    //     for k in &mut self.kernels {
+    //         k.reset(
+    //             &data[(rng.uni() * data.len() as f64) as usize],
+    //             &global_kernel.var,
+    //         );
+    //     }
+    // }
 
     /// initialise with dispearsed random samples (kmeans++)
     fn initialise_kernels_kmeanspp(&mut self, rng: &mut Marsaglia, data: &[[f64; IDIM]]) {

@@ -1,4 +1,5 @@
 use std::fmt;
+use stmc_rs::marsaglia::Marsaglia;
 
 #[derive(Copy, Clone)]
 pub struct GKernel<const IDIM: usize> {
@@ -36,12 +37,15 @@ impl<const IDIM: usize> GKernel<IDIM> {
         self.var.copy_from_slice(var);
     }
 
-    pub fn split(&mut self, other: &GKernel<IDIM>) {
-        self.mean
-            .iter_mut()
-            .zip(other.mean.iter())
-            .for_each(|(m, om)| *m = *om + 0.001);
-        self.var.copy_from_slice(&other.var);
+    pub fn split(&mut self, rng: &mut Marsaglia) -> GKernel<IDIM> {
+        let mut s = [0.0f64; IDIM];
+        s.iter_mut()
+            .zip(self.mean)
+            .for_each(|(x, y)| *x = y + rng.uni() * 0.001);
+        GKernel {
+            mean: s,
+            var: self.var.clone(),
+        }
     }
 
     pub fn estimate(&mut self, data: &[[f64; IDIM]]) {
