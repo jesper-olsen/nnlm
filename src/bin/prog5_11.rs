@@ -1,7 +1,7 @@
 use clap::Parser;
 use env_logger;
 use gnuplot::{AxesCommon, Caption, Color, Figure, LineStyle, LineWidth, Solid};
-use log::{info, LevelFilter};
+use log::LevelFilter;
 use nnlm::rbf::RBF;
 use nnlm::{halfmoons, plot_mse};
 use stmc_rs::marsaglia::Marsaglia;

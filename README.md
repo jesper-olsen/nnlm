@@ -23,13 +23,13 @@ Usage: prog5_11 [OPTIONS]
 
 Options:
   -l, --lms           Weight training: Least Mean Squares (default: Recursive Least Squares)
-  -k, --kmeans        Kernel training: k-means (default: Expectation Maximisation)
-  -d, --dist <D>      distance between halfmoons (e.g. -5.0 to 5.0) [default: -5]
+  -k, --kmeans        Kernel training: k-means (default: EM, kmeans++)
+  -b, --hierarchical  Kernel training: Expectation Maximisation, binary splitting (default: EM, kmeans++)
+  -d, --dist <D>      distance between halfmoons (e.g. -5.0 to 5.0 [default: -5]
   -s, --seed <S>      seed rng [default: 12]
   -n, --nkernels <N>  number of RBF kernels [default: 20]
   -h, --help          Print help
   -V, --version       Print version
-
 ```
 ```
 % cargo run --bin prog5_11 --release
