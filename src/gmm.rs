@@ -276,6 +276,8 @@ impl<const IDIM: usize> GMM<IDIM> {
             .enumerate()
             .filter(|(k, _)| gksum[*k] > 10.0)
             .for_each(|(k, knl)| {
+                knl.mean.fill(0.0);
+                knl.var.fill(0.0);
                 for (x, gamma) in data.iter().zip(sample2gamma.iter()) {
                     knl.mean
                         .iter_mut()
