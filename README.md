@@ -18,8 +18,7 @@ See src/bin - e.g. problem 5.11, train a Radial Basis Function network on the ha
 
 ```
 % cargo run --bin prog5_11 --release -- -h
-    Finished `release` profile [optimized] target(s) in 0.32s
-     Running `target/release/prog5_11 -h`
+
 Usage: prog5_11 [OPTIONS]
 
 Options:
@@ -144,28 +143,7 @@ Options:
 [2024-11-06T09:40:03Z INFO  nnlm::gmm] EM training - ep: 97; #kernels: 15; cdist:  0.00
 [2024-11-06T09:40:03Z INFO  nnlm::gmm] EM training - ep: 98; #kernels: 15; cdist:  0.00
 [2024-11-06T09:40:03Z INFO  nnlm::gmm] EM training - ep: 99; #kernels: 15; cdist:  0.00
-Detected locale "en_US" with character encoding "", which is not UTF-8.
-Qt depends on a UTF-8 locale, and has switched to "UTF-8" instead.
-If this causes problems, reconfigure your locale. See the locale(1) manual
-for more information.
-Detected locale "en_US" with character encoding "", which is not UTF-8.
-Qt depends on a UTF-8 locale, and has switched to "UTF-8" instead.
-If this causes problems, reconfigure your locale. See the locale(1) manual
-for more information.
-qt.qpa.fonts: Populating font family aliases took 68 ms. Replace uses of missing font family "Sans" with one that exists to avoid this cost.
-2024-11-06 03:40:04.910 gnuplot_qt[50488:1785453] +[IMKClient subclass]: chose IMKClient_Legacy
-2024-11-06 03:40:04.910 gnuplot_qt[50488:1785453] +[IMKInputSession subclass]: chose IMKInputSession_Legacy
-Detected locale "en_US" with character encoding "", which is not UTF-8.
-Qt depends on a UTF-8 locale, and has switched to "UTF-8" instead.
-If this causes problems, reconfigure your locale. See the locale(1) manual
-for more information.
-Detected locale "en_US" with character encoding "", which is not UTF-8.
-Qt depends on a UTF-8 locale, and has switched to "UTF-8" instead.
-If this causes problems, reconfigure your locale. See the locale(1) manual
-for more information.
-qt.qpa.fonts: Populating font family aliases took 64 ms. Replace uses of missing font family "Sans" with one that exists to avoid this cost.
-2024-11-06 03:40:43.346 gnuplot_qt[50556:1786155] +[IMKClient subclass]: chose IMKClient_Legacy
-2024-11-06 03:40:43.346 gnuplot_qt[50556:1786155] +[IMKInputSession subclass]: chose IMKInputSession_Legacy
+
 RBF
 Weights:    29.34    26.61    12.20    27.14   -24.78   -11.76   -25.75   -23.74   -29.34   -23.28    22.36   -25.07    24.24   -14.06    32.16
 0: GKernel
