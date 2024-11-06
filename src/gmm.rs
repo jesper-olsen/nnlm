@@ -1,7 +1,30 @@
-use crate::kernel::GKernel;
+use crate::kernel::{DistanceMeasure, GKernel};
 use log::{info, warn};
 use std::fmt;
 use stmc_rs::marsaglia::Marsaglia;
+
+#[derive(Debug, Clone, Copy)]
+pub enum Training {
+    Kmeans,
+    Em,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Init {
+    Kmeanspp,
+    Hierarchical,
+}
+
+pub struct Cfg {
+    pub distance_measure: DistanceMeasure,
+    pub update_variances: bool,
+    pub variance_floor: f64,
+    pub init: Init,
+    pub training: Training,
+    pub max_iter: usize,
+    pub rng: Marsaglia,
+    pub epsilon: f64, // convergence criterion: distance between kernel means
+}
 
 pub struct GMM<const IDIM: usize> {
     pub kernels: Vec<GKernel<IDIM>>,
@@ -14,12 +37,29 @@ impl<const IDIM: usize> fmt::Display for GMM<IDIM> {
 
         write!(f, "Weights: ")?;
         for w in &self.weights {
-            write!(f, "{:>8.2} ", w)?;
+            write!(f, "{w:>8.2} ")?;
         }
         writeln!(f)?;
 
         for (i, k) in self.kernels.iter().enumerate() {
-            write!(f, "{i}: {}", k)?;
+            write!(f, "{i}: {k}")?;
+        }
+        Ok(())
+    }
+}
+
+impl<const IDIM: usize> fmt::Debug for GMM<IDIM> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "GMM")?;
+
+        write!(f, "Weights: ")?;
+        for w in &self.weights {
+            write!(f, "{w} ")?;
+        }
+        writeln!(f)?;
+
+        for (i, k) in self.kernels.iter().enumerate() {
+            write!(f, "{i}: {k:?}")?;
         }
         Ok(())
     }
@@ -43,6 +83,7 @@ impl<const IDIM: usize> GMM<IDIM> {
 
     fn kmeans_step(
         &mut self,
+        cfg: &Cfg,
         data: &[[f64; IDIM]],
         new_kernels: &mut Vec<GKernel<IDIM>>,
         sample2kernel: &mut Vec<usize>,
@@ -72,7 +113,9 @@ impl<const IDIM: usize> GMM<IDIM> {
             if kcounts[c] > 1 {
                 // Estimate mean and variance - Welford's method
                 k.mean.fill(0.0);
-                k.var.fill(0.0);
+                if cfg.update_variances {
+                    k.var.fill(0.0);
+                }
                 let mut old_mean = [0.0f64; IDIM];
                 data.iter()
                     .zip(sample2kernel.iter())
@@ -85,11 +128,18 @@ impl<const IDIM: usize> GMM<IDIM> {
                             .iter_mut()
                             .zip(v.iter())
                             .for_each(|(m, x)| *m += (*x - *m) / (i + 1) as f64);
-                        for j in 0..IDIM {
-                            k.var[j] += (v[j] - k.mean[j]) * (v[j] - old_mean[j]);
+                        if cfg.update_variances {
+                            for j in 0..IDIM {
+                                k.var[j] += (v[j] - k.mean[j]) * (v[j] - old_mean[j]);
+                            }
                         }
                     });
-                k.var.iter_mut().for_each(|e| *e /= (kcounts[c] - 1) as f64);
+                if cfg.update_variances {
+                    k.var.iter_mut().for_each(|e| *e /= (kcounts[c] - 1) as f64);
+                    k.var
+                        .iter_mut()
+                        .for_each(|e| *e = e.max(cfg.variance_floor));
+                }
             }
         }
         self.remove_defunkt_kernels(new_kernels);
@@ -106,16 +156,11 @@ impl<const IDIM: usize> GMM<IDIM> {
         i
     }
 
-    pub fn train_kernels_hierarchical(
-        &mut self,
-        rng: &mut Marsaglia,
-        data: &[[f64; IDIM]],
-        max_iter: usize,
-    ) {
+    pub fn train_kernels_hierarchical(&mut self, cfg: &mut Cfg, data: &[[f64; IDIM]]) {
         let nkernels = self.kernels.len();
         self.kernels.drain(1..nkernels);
         self.weights.drain(1..nkernels);
-        self.kernels[0].estimate(data);
+        self.kernels[0].estimate(data, cfg.update_variances, cfg.variance_floor);
         self.weights[0] = 1.0;
         // split the kernel with the largest weight in each iteration
         // Limit number of iterations - because of defunkt mixtures
@@ -124,11 +169,14 @@ impl<const IDIM: usize> GMM<IDIM> {
                 break;
             }
             let i = self.largest_mixture();
-            let k = self.kernels[i].split(rng);
+            let k = self.kernels[i].split(&mut cfg.rng);
             self.kernels.push(k);
             self.weights[i] /= 2.0;
             self.weights.push(self.weights[i]);
-            self.train_kernels_em(rng, data, max_iter);
+            match cfg.training {
+                Training::Em => self.train_kernels_em(cfg, data),
+                Training::Kmeans => self.train_kernels_kmeans(cfg, data),
+            }
         }
     }
 
@@ -145,12 +193,12 @@ impl<const IDIM: usize> GMM<IDIM> {
     // }
 
     /// initialise with dispearsed random samples (kmeans++)
-    fn initialise_kernels_kmeanspp(&mut self, rng: &mut Marsaglia, data: &[[f64; IDIM]]) {
+    fn initialise_kernels_kmeanspp(&mut self, cfg: &mut Cfg, data: &[[f64; IDIM]]) {
         let mut global_kernel = GKernel::<IDIM>::new();
-        global_kernel.estimate(data);
+        global_kernel.estimate(data, cfg.update_variances, cfg.variance_floor);
 
         self.kernels[0].reset(
-            &data[(rng.uni() * data.len() as f64) as usize],
+            &data[(cfg.rng.uni() * data.len() as f64) as usize],
             &global_kernel.var,
         );
 
@@ -162,7 +210,7 @@ impl<const IDIM: usize> GMM<IDIM> {
             data.iter()
                 .map(|x| self.nearest_kernel(x))
                 .for_each(|(d, _)| min_distances.push(d));
-            let target: f64 = rng.uni() * min_distances.iter().sum::<f64>();
+            let target: f64 = cfg.rng.uni() * min_distances.iter().sum::<f64>();
             let mut cd = 0.0;
             for (i, &d) in min_distances.iter().enumerate() {
                 cd += d;
@@ -174,33 +222,41 @@ impl<const IDIM: usize> GMM<IDIM> {
         }
     }
 
-    pub fn train_kernels_kmeans(
-        &mut self,
-        rng: &mut Marsaglia,
-        data: &[[f64; IDIM]],
-        max_iter: usize,
-    ) {
-        const EPSILON: f64 = 0.0;
+    pub fn train(&mut self, cfg: &mut Cfg, data: &[[f64; IDIM]]) {
         debug_assert!(
             data.len() >= self.kernels.len(),
-            "Not enough data samples to initialize centroids."
+            "Not enough data samples to initialize kernels."
         );
 
-        //self.initialise_kernels_kmeans(rng, data);
-        self.initialise_kernels_kmeanspp(rng, data);
+        match (cfg.init, cfg.training) {
+            (Init::Kmeanspp, Training::Kmeans) => {
+                self.initialise_kernels_kmeanspp(cfg, data);
+                self.train_kernels_hierarchical(cfg, data);
+            }
+            (Init::Kmeanspp, Training::Em) => {
+                self.initialise_kernels_kmeanspp(cfg, data);
+                self.train_kernels_em(cfg, data);
+            }
+            (Init::Hierarchical, _) => self.train_kernels_hierarchical(cfg, data),
+        }
+    }
 
+    pub fn train_kernels_kmeans(&mut self, cfg: &mut Cfg, data: &[[f64; IDIM]]) {
         let mut new_kernels = vec![GKernel::new(); self.kernels.len()];
         let mut sample2kernel: Vec<usize> = Vec::with_capacity(data.len());
-        for ep in 0..max_iter {
-            let cdist = self.kmeans_step(data, &mut new_kernels, &mut sample2kernel);
-            info!("Kmeans ep: {ep}; cdist: {cdist:>5.2}");
-            if cdist <= EPSILON {
+        for ep in 0..cfg.max_iter {
+            let cdist = self.kmeans_step(cfg, data, &mut new_kernels, &mut sample2kernel);
+            info!(
+                "Kmeans ep: {ep}; #kernels: {}; cdist: {cdist:>5.2}",
+                self.kernels.len()
+            );
+            if cdist <= cfg.epsilon {
                 break;
             }
         }
     }
 
-    fn nearest_kernel(&self, x: &[f64; IDIM]) -> (f64, usize) {
+    pub fn nearest_kernel(&self, x: &[f64; IDIM]) -> (f64, usize) {
         self.kernels
             .iter()
             .enumerate()
@@ -243,6 +299,7 @@ impl<const IDIM: usize> GMM<IDIM> {
 
     fn em_step(
         &mut self,
+        cfg: &Cfg,
         data: &[[f64; IDIM]],
         new_kernels: &mut Vec<GKernel<IDIM>>,
         sample2gamma: &mut Vec<Vec<f64>>,
@@ -277,7 +334,10 @@ impl<const IDIM: usize> GMM<IDIM> {
             .filter(|(k, _)| gksum[*k] > 10.0)
             .for_each(|(k, knl)| {
                 knl.mean.fill(0.0);
-                knl.var.fill(0.0);
+                if cfg.update_variances {
+                    knl.var.fill(0.0);
+                }
+
                 for (x, gamma) in data.iter().zip(sample2gamma.iter()) {
                     knl.mean
                         .iter_mut()
@@ -286,14 +346,19 @@ impl<const IDIM: usize> GMM<IDIM> {
                 }
                 knl.mean.iter_mut().for_each(|m| *m /= gksum[k]);
 
-                for (x, gamma) in data.iter().zip(sample2gamma.iter()) {
+                if cfg.update_variances {
+                    for (x, gamma) in data.iter().zip(sample2gamma.iter()) {
+                        knl.var
+                            .iter_mut()
+                            .zip(knl.mean.iter())
+                            .zip(x.iter())
+                            .for_each(|((v, m), e)| *v += gamma[k] * (m - e).powi(2));
+                    }
+                    knl.var.iter_mut().for_each(|v| *v /= gksum[k]);
                     knl.var
                         .iter_mut()
-                        .zip(knl.mean.iter())
-                        .zip(x.iter())
-                        .for_each(|((v, m), e)| *v += gamma[k] * (m - e).powi(2));
+                        .for_each(|e| *e = e.max(cfg.variance_floor));
                 }
-                knl.var.iter_mut().for_each(|v| *v /= gksum[k]);
                 self.weights[k] = gksum[k] / data.len() as f64;
             });
 
@@ -301,22 +366,18 @@ impl<const IDIM: usize> GMM<IDIM> {
         self.check_convergence(new_kernels)
     }
 
-    pub fn train_kernels_em(&mut self, rng: &mut Marsaglia, data: &[[f64; IDIM]], max_iter: usize) {
-        const EPSILON: f64 = 0.0;
-        debug_assert!(
-            data.len() >= self.kernels.len(),
-            "Not enough data samples to initialize kernels."
-        );
-
-        self.initialise_kernels_kmeanspp(rng, data);
+    pub fn train_kernels_em(&mut self, cfg: &mut Cfg, data: &[[f64; IDIM]]) {
         let mut new_kernels = vec![GKernel::<IDIM>::new(); self.kernels.len()];
         let mut sample2gamma: Vec<Vec<f64>> = Vec::with_capacity(data.len());
 
-        for ep in 0..max_iter {
-            let cdist = self.em_step(data, &mut new_kernels, &mut sample2gamma);
+        for ep in 0..cfg.max_iter {
+            let cdist = self.em_step(cfg, data, &mut new_kernels, &mut sample2gamma);
 
-            info!("EM training - ep: {ep}; cdist: {cdist:>5.2}");
-            if cdist <= EPSILON {
+            info!(
+                "EM training - ep: {ep}; #kernels: {}; cdist: {cdist:>5.2}",
+                new_kernels.len()
+            );
+            if cdist <= cfg.epsilon {
                 break;
             }
         }

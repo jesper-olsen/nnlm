@@ -1,6 +1,11 @@
 use std::fmt;
 use stmc_rs::marsaglia::Marsaglia;
 
+pub enum DistanceMeasure {
+    Euclidian,
+    Mahalanobis,
+}
+
 #[derive(Copy, Clone)]
 pub struct GKernel<const IDIM: usize> {
     pub mean: [f64; IDIM],
@@ -18,6 +23,23 @@ impl<const IDIM: usize> fmt::Display for GKernel<IDIM> {
         write!(f, "var:  ")?;
         for j in 0..IDIM {
             write!(f, "{:>8.2} ", self.var[j])?;
+        }
+        writeln!(f)?;
+        Ok(())
+    }
+}
+
+impl<const IDIM: usize> fmt::Debug for GKernel<IDIM> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "GKernel")?;
+        write!(f, "mean: ")?;
+        for j in 0..IDIM {
+            write!(f, "{} ", self.mean[j])?;
+        }
+        writeln!(f)?;
+        write!(f, "var:  ")?;
+        for j in 0..IDIM {
+            write!(f, "{} ", self.var[j])?;
         }
         writeln!(f)?;
         Ok(())
@@ -48,10 +70,12 @@ impl<const IDIM: usize> GKernel<IDIM> {
         }
     }
 
-    pub fn estimate(&mut self, data: &[[f64; IDIM]]) {
+    pub fn estimate(&mut self, data: &[[f64; IDIM]], update_variances: bool, variance_floor: f64) {
         // Estimate mean and variance - Welford's method
         self.mean.fill(0.0);
-        self.var.fill(0.0);
+        if update_variances {
+            self.var.fill(0.0);
+        }
         let mut old_mean = [0.0f64; IDIM];
         for (i, v) in data.iter().enumerate() {
             old_mean.copy_from_slice(&self.mean);
@@ -59,13 +83,19 @@ impl<const IDIM: usize> GKernel<IDIM> {
                 .iter_mut()
                 .zip(v.iter())
                 .for_each(|(m, x)| *m += (*x - *m) / (i + 1) as f64);
-            for j in 0..IDIM {
-                self.var[j] += (v[j] - self.mean[j]) * (v[j] - old_mean[j]);
+            if update_variances {
+                for j in 0..IDIM {
+                    self.var[j] += (v[j] - self.mean[j]) * (v[j] - old_mean[j]);
+                }
             }
         }
-        self.var
-            .iter_mut()
-            .for_each(|e| *e /= (data.len() - 1) as f64);
+        if update_variances {
+            self.var
+                .iter_mut()
+                .for_each(|e| *e /= (data.len() - 1) as f64);
+
+            self.var.iter_mut().for_each(|e| *e = e.max(variance_floor));
+        }
     }
 
     fn _estimate(&mut self, data: &[[f64; IDIM]]) {
@@ -122,12 +152,20 @@ impl<const IDIM: usize> GKernel<IDIM> {
         -0.5 * (self.dist(x) + s)
     }
 
-    /// Probability of x
+    /// Likelihood of x
     pub fn p(&self, x: &[f64]) -> f64 {
         debug_assert_eq!(x.len(), IDIM);
         let a: f64 = (2.0 * std::f64::consts::PI).powi(IDIM as i32);
         let vproduct = self.var.iter().fold(a, |acc, v| acc * v);
         (1.0 / vproduct.sqrt()) * (-0.5 * self.dist(x)).exp()
+    }
+
+    /// Log likelihood of x
+    pub fn log_p(&self, x: &[f64]) -> f64 {
+        debug_assert_eq!(x.len(), IDIM);
+        let log_a = -(IDIM as f64) * 0.5 * std::f64::consts::PI.ln();
+        let log_vproduct: f64 = self.var.iter().map(|&v| v.ln()).sum();
+        log_a - 0.5 * log_vproduct - 0.5 * self.dist(x)
     }
 
     pub fn floor_variances(&mut self, floor: f64) {

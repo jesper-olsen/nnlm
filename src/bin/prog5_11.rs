@@ -6,6 +6,9 @@ use nnlm::rbf::RBF;
 use nnlm::{halfmoons, plot_mse};
 use stmc_rs::marsaglia::Marsaglia;
 
+use nnlm::gmm::{Cfg, Init, Training};
+use nnlm::kernel::DistanceMeasure;
+
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -13,10 +16,10 @@ struct Args {
     /// Weight training: Least Mean Squares (default: Recursive Least Squares)
     l: bool,
     #[arg(short, long = "kmeans", default_value_t = false)]
-    /// Kernel training: k-means (default: EM, kmeans++)
+    /// Kernel training: k-means (default: EM)
     k: bool,
     #[arg(short, long = "hierarchical", default_value_t = false)]
-    /// Kernel training: Expectation Maximisation, binary splitting (default: EM, kmeans++)
+    /// Kernel initialisation: binary splitting from global mean (default: kmeans++)
     b: bool,
     #[arg(short, long="dist", default_value_t = -5.0)]
     ///distance between halfmoons (e.g. -5.0 to 5.0
@@ -110,18 +113,39 @@ fn main() {
     let (tedata, telabels) = halfmoons::<2000>(central_radius, radius_variation, dist);
     let mut model = RBF::<2>::new(args.n);
 
+    let mut cfg = Cfg {
+        distance_measure: DistanceMeasure::Mahalanobis,
+        init: if args.b {
+            Init::Hierarchical
+        } else {
+            Init::Kmeanspp
+        },
+        training: if args.k {
+            Training::Kmeans
+        } else {
+            Training::Em
+        },
+        update_variances: true,
+        variance_floor: 0.0,
+        //variance_floor: 1e-1,
+        epsilon: 0.0,
+        max_iter: 100,
+        rng: Marsaglia::new(args.s, 34, 56, 78),
+    };
+    model.gmm.train(&mut cfg, &trdata);
+
     const MAX_ITER: usize = 100;
-    //let mut rng = Marsaglia::new(12, 34, 56, 78);
-    let mut rng = Marsaglia::new(args.s, 34, 56, 78);
-    if args.k {
-        model.gmm.train_kernels_kmeans(&mut rng, &trdata, MAX_ITER);
-    } else if args.b {
-        model
-            .gmm
-            .train_kernels_hierarchical(&mut rng, &trdata, MAX_ITER);
-    } else {
-        model.gmm.train_kernels_em(&mut rng, &trdata, MAX_ITER);
-    }
+    // //let mut rng = Marsaglia::new(12, 34, 56, 78);
+    // let mut rng = Marsaglia::new(args.s, 34, 56, 78);
+    // if args.k {
+    //     model.gmm.train_kernels_kmeans(&mut rng, &trdata, MAX_ITER);
+    // } else if args.b {
+    //     model
+    //         .gmm
+    //         .train_kernels_hierarchical(&mut rng, &trdata, MAX_ITER);
+    // } else {
+    //     model.gmm.train_kernels_em(&mut rng, &trdata, MAX_ITER);
+    // }
     let pdata: Vec<(f64, f64, f64)> = trdata
         .iter()
         .zip(trlabels.iter())
