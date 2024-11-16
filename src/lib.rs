@@ -58,7 +58,7 @@ pub fn normalise_mean(data: &mut [[f64; 2]], mean: &[f64]) {
 }
 
 pub fn calc_max(data: &[[f64; 2]]) -> Vec<f64> {
-    data.iter().fold(vec![0.0; 2], |acc, x| {
+    data.iter().fold(vec![f64::MIN; 2], |acc, x| {
         acc.iter()
             .zip(x.iter())
             .map(|(a, b)| a.max(b.abs()))
@@ -165,6 +165,86 @@ pub fn plot(data: &[[f64; 3]], weights: &[f64], title: &str) {
         .points(&pos_x, &pos_y, &[PointSymbol('.'), Color("green")]) // Positive classified points
         .points(&neg_x, &neg_y, &[PointSymbol('.'), Color("red")]) // Negative classified points
         .lines(&x_vals, &y_vals, &[Color("black")]);
+    fg.show().unwrap();
+}
+
+pub fn plot_mesh<F>(data: &[[f64; 3]], model: F, title: &str)
+where
+    F: Fn(&[f64; 3]) -> f64,
+{
+    let (xmin, xmax) = data
+        .iter()
+        .map(|&v| v[1])
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(min, max), val| {
+            (f64::min(min, val), f64::max(max, val))
+        });
+    let (ymin, ymax) = data
+        .iter()
+        .map(|&v| v[2])
+        .fold((f64::INFINITY, f64::NEG_INFINITY), |(min, max), val| {
+            (f64::min(min, val), f64::max(max, val))
+        });
+
+    // Grid points - different colours and different sides of decision boundary
+    let mut grid = Vec::new();
+
+    let x_range = xmax - xmin;
+    let y_range = ymax - ymin;
+    let step_size = f64::min(x_range, y_range) / 150.0; // grid density
+
+    let mut x = xmin;
+    while x <= xmax {
+        let mut y = ymin;
+        while y <= ymax {
+            let input = [1.0, x, y]; // input with bias
+                                     //let z: f64 = weights.iter().zip(input.iter()).map(|(w, x)| w * x).sum();
+            let z = model(&input);
+            grid.push((x, y, z.signum() as i8));
+            y += step_size
+        }
+        x += step_size
+    }
+
+    let pos_x: Vec<f64> = grid
+        .iter()
+        .filter(|(_, _, z)| *z == 1)
+        .map(|(x, _, _)| *x)
+        .collect();
+    let pos_y: Vec<f64> = grid
+        .iter()
+        .filter(|(_, _, z)| *z == 1)
+        .map(|(_, y, _)| *y)
+        .collect();
+    let neg_x: Vec<f64> = grid
+        .iter()
+        .filter(|(_, _, z)| *z == -1)
+        .map(|(x, _, _)| *x)
+        .collect();
+    let neg_y: Vec<f64> = grid
+        .iter()
+        .filter(|(_, _, z)| *z == -1)
+        .map(|(_, y, _)| *y)
+        .collect();
+
+    // calcualte decision boundary
+    // let x_vals: Vec<f64> = (0..=100)
+    //     .map(|i| xmin + (xmax - xmin) * (i as f64 / 100.0))
+    //     .collect();
+    // let y_vals: Vec<f64> = x_vals
+    //     .iter()
+    //     .map(|&x| -(weights[0] + weights[1] * x) / weights[2])
+    //     .collect();
+
+    let vx: Vec<f64> = data.iter().map(|v| v[1]).collect();
+    let vy: Vec<f64> = data.iter().map(|v| v[2]).collect();
+    // Plot using gnuplot
+    let mut fg = Figure::new();
+    fg.axes2d()
+        .set_title(title, &[])
+        .points(&vx, &vy, &[PointSymbol('O'), Color("blue")]) // Original data points
+        .points(&pos_x, &pos_y, &[PointSymbol('.'), Color("green")]) // Positive classified points
+        .points(&neg_x, &neg_y, &[PointSymbol('.'), Color("red")]); // Negative classified points
+                                                                    //.lines(&x_vals, &y_vals, &[Color("black")]);
     fg.show().unwrap();
 }
 

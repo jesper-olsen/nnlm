@@ -2,21 +2,6 @@ use gnuplot::{AxesCommon, Figure};
 use nnlm::perceptron::Perceptron;
 use nnlm::*;
 
-fn plot_mse(mse: &[f64], title: &str) {
-    let epochs: Vec<i32> = (0..mse.len()).map(|i| i as i32).collect();
-    let mut fg = Figure::new();
-    fg.axes2d()
-        .set_title(title, &[])
-        .set_x_label("Epoch", &[])
-        .set_y_label("MSE", &[])
-        .lines(
-            &epochs,
-            mse,
-            &[gnuplot::Caption("MSE"), gnuplot::Color("black")],
-        );
-    fg.show().unwrap();
-}
-
 fn main() {
     for dist in [-4.0, 1.0, 0.0, 4.0] {
         const NEPOCHS: usize = 50;

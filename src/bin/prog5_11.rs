@@ -3,7 +3,7 @@ use env_logger;
 use gnuplot::{AxesCommon, Caption, Color, Figure, LineStyle, LineWidth, Solid};
 use log::LevelFilter;
 use nnlm::rbf::RBF;
-use nnlm::{halfmoons, plot_mse};
+use nnlm::{halfmoons, plot_mesh, plot_mse};
 use stmc_rs::marsaglia::Marsaglia;
 
 use nnlm::gmm::{Cfg, Init, Training};
@@ -135,17 +135,6 @@ fn main() {
     model.gmm.train(&mut cfg, &trdata);
 
     const MAX_ITER: usize = 100;
-    // //let mut rng = Marsaglia::new(12, 34, 56, 78);
-    // let mut rng = Marsaglia::new(args.s, 34, 56, 78);
-    // if args.k {
-    //     model.gmm.train_kernels_kmeans(&mut rng, &trdata, MAX_ITER);
-    // } else if args.b {
-    //     model
-    //         .gmm
-    //         .train_kernels_hierarchical(&mut rng, &trdata, MAX_ITER);
-    // } else {
-    //     model.gmm.train_kernels_em(&mut rng, &trdata, MAX_ITER);
-    // }
     let pdata: Vec<(f64, f64, f64)> = trdata
         .iter()
         .zip(trlabels.iter())

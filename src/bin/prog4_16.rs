@@ -1,35 +1,62 @@
+use gnuplot::{AxesCommon, Color, Figure, PointSymbol};
 use nnlm::perceptron::Perceptron;
 use nnlm::*;
 use stmc_rs::marsaglia::Marsaglia;
 
 const IDIM: usize = 3;
 
-fn dtanh(x: f64) -> f64 {
+fn dact(x: f64) -> f64 {
     1.0 - x.tanh().powi(2)
+    // if x > 0.0 {
+    //     1.0
+    // } else {
+    //     0.0
+    // } // ReLU
+    // if x > 0.0 {
+    //     1.0
+    // } else {
+    //     0.01
+    // }
+}
+
+fn act(x: f64) -> f64 {
+    x.tanh()
+    //x.max(0.0) // ReLU
+
+    // if x > 0.0 {
+    //     x
+    // } else {
+    //     0.01 * x
+    // }
 }
 
 fn mlp_output(hlayer: &[Perceptron<IDIM>], olayer: &Perceptron<21>, x: &[f64; IDIM]) -> f64 {
     let mut hd = vec![0.0; hlayer.len() + 1];
     hd[hlayer.len()] = 1.0; // bias
     for i in 0..hlayer.len() {
-        hd[i] = hlayer[i].output(x).tanh();
+        hd[i] = act(hlayer[i].output(x));
     }
-    olayer.output(&hd).tanh()
+    act(olayer.output(&hd))
+}
+
+fn lr(ep: usize) -> f64 {
+    //1e-3 / (1.0 + ep as f64)
+    1e-3
 }
 
 fn mlp(dist: f64) {
     let central_radius = 10.0;
     let radius_variation = 6.0;
-    let (data, labels) = halfmoons::<3000>(central_radius, radius_variation, dist);
+    let (mut data, labels) = halfmoons::<3000>(central_radius, radius_variation, dist);
     const NTRAIN: usize = 1000;
 
-    // let mean = nnlm::calc_mean(&data[..NTRAIN]);
-    // normalise_mean(&mut data[..NTRAIN], &mean);
-    // normalise_mean(&mut data[NTRAIN..], &mean);
+    let mean = nnlm::calc_mean(&data[..NTRAIN]);
+    normalise_mean(&mut data[..NTRAIN], &mean);
+    normalise_mean(&mut data[NTRAIN..], &mean);
 
-    // let max_vals = calc_max(&data[..NTRAIN]);
-    // normalise_max(&mut data[..NTRAIN], &max_vals);
-    // normalise_max(&mut data[NTRAIN..], &max_vals);
+    let max_vals = calc_max(&data[..NTRAIN]);
+    normalise_max(&mut data[..NTRAIN], &max_vals);
+    normalise_max(&mut data[NTRAIN..], &max_vals);
 
     let data: Vec<_> = data
         .into_iter()
@@ -40,35 +67,46 @@ fn mlp(dist: f64) {
     let mut hlayer = Vec::new();
     for _ in 0..20 {
         let mut p = Perceptron::<IDIM>::new();
+        let norm = (p.weights.len() as f64).sqrt();
+        let norm = (2.0 / (1 + p.weights.len()) as f64).sqrt();
         p.weights
             .iter_mut()
-            .for_each(|w| *w = rng.uni() / 2.0 - 0.5);
+            //.for_each(|w| *w = rng.uni() / 2.0 - 0.25);
+            .for_each(|w| *w = rng.gauss() * norm);
         hlayer.push(p);
     }
     let mut olayer = Perceptron::<21>::new();
+    let norm = (2.0 / (21.0f64)).sqrt();
+    olayer
+        .weights
+        .iter_mut()
+        //.for_each(|w| *w = rng.uni() / 2.0 - 0.25);
+        .for_each(|w| *w = rng.gauss() * norm);
+
     let mse_thres = 1e-3;
     let mut err = Vec::new();
 
-    let lr = |ep: usize| -> f64 { 1e-2 / (10.0 + ep as f64) };
-    for ep in 0..50 {
+    //let lr = |ep: usize| -> f64 { 1e-2 / (10.0 + ep as f64) };
+    //let lr = |ep: usize| -> f64 { 1e-3 };
+    const MAX_EPOCHS: usize = 500;
+    for ep in 0..MAX_EPOCHS {
         let mut hd = vec![0.0; hlayer.len() + 1];
         hd[hlayer.len()] = 1.0; // bias
         let mut mse = 0.0;
         for (i, x) in data[..NTRAIN].iter().enumerate() {
             // Forward pass
             for z in 0..hlayer.len() {
-                hd[z] = hlayer[z].output(x).tanh();
+                hd[z] = act(hlayer[z].output(x));
             }
-            let o = olayer.output(&hd).tanh();
+            let o = act(olayer.output(&hd));
             let e = o - labels[i] as f64;
             mse += e * e;
 
             // Backpropagation
-            let delta_o = e * dtanh(o);
+            let delta_o = e * dact(o);
             let mut delta_h = vec![0.0; hlayer.len()];
-
             for j in 0..delta_h.len() {
-                delta_h[j] = olayer.weights[j] * delta_o * dtanh(hd[j]);
+                delta_h[j] = olayer.weights[j] * delta_o * dact(hd[j]);
             }
 
             // Update weights
@@ -98,12 +136,19 @@ fn mlp(dist: f64) {
         .count();
 
     let ntest = data.len() - NTRAIN;
-    let acc = 100.0 * (correct as f64 / ntest as f64);
-    println!("Correct: {correct}/{ntest} = {acc:.2}%");
+    let errors = ntest - correct;
+    let er = 100.0 * (errors as f64 / ntest as f64);
+    println!("Errors: {correct}/{ntest} = {er:.2}%");
+
+    let title = format!("Learning curve - dist: {dist};");
+    plot_mse(&err, &title);
+    let title = format!("MLP Classification with Half-Moon Data - dist: {dist}; Error: {er:.1}%");
+    let mlp_model = |input: &[f64; 3]| mlp_output(&hlayer, &olayer, input);
+    plot_mesh(&data[NTRAIN..], mlp_model, &title);
 }
 
 fn main() {
-    for dist in [0.0] {
-        mlp(dist);
-    }
+    //let dist = 0.0;
+    let dist = -4.0;
+    mlp(dist);
 }
