@@ -1,7 +1,7 @@
 Neural Networks and Learning Machines
 ===============
 
-Rusty solutions to selected problems in [1], e.g. half moon dataset:
+Rusty solutions to selected problems in [1], e.g. half moons dataset:
 
 * prog1_6: Pereptron 
 * prog2_8: Least Squares
