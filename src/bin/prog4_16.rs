@@ -1,4 +1,3 @@
-use gnuplot::{AxesCommon, Color, Figure, PointSymbol};
 use nnlm::perceptron::Perceptron;
 use nnlm::*;
 use stmc_rs::marsaglia::Marsaglia;
@@ -6,28 +5,26 @@ use stmc_rs::marsaglia::Marsaglia;
 const IDIM: usize = 3;
 
 fn dact(x: f64) -> f64 {
-    1.0 - x.tanh().powi(2)
-    // if x > 0.0 {
-    //     1.0
-    // } else {
-    //     0.0
-    // } // ReLU
-    // if x > 0.0 {
-    //     1.0
-    // } else {
-    //     0.01
-    // }
+    //drelu(x)   // ReLU
+    //1.0 - x.tanh().powi(2)  // tanh(x)
+    2.0 - 2.0 * (2.0 * x).tanh().powi(2) // tanh(2x)
 }
 
 fn act(x: f64) -> f64 {
-    x.tanh()
-    //x.max(0.0) // ReLU
+    //relu(x)        // does not work well on halfmoons
+    //x.tanh()
+    (2.0 * x).tanh()
+}
 
-    // if x > 0.0 {
-    //     x
-    // } else {
-    //     0.01 * x
-    // }
+fn relu(x: f64) -> f64 {
+    if x > 0.0 {
+        1.0
+    } else {
+        0.0
+    }
+}
+fn drelu(x: f64) -> f64 {
+    x.max(0.0)
 }
 
 fn mlp_output(hlayer: &[Perceptron<IDIM>], olayer: &Perceptron<21>, x: &[f64; IDIM]) -> f64 {
@@ -40,8 +37,8 @@ fn mlp_output(hlayer: &[Perceptron<IDIM>], olayer: &Perceptron<21>, x: &[f64; ID
 }
 
 fn lr(ep: usize) -> f64 {
-    //1e-3 / (1.0 + ep as f64)
-    1e-3
+    1e-0 / (1000.0 + ep as f64)
+    //1e-3
 }
 
 fn mlp(dist: f64) {
@@ -67,7 +64,6 @@ fn mlp(dist: f64) {
     let mut hlayer = Vec::new();
     for _ in 0..20 {
         let mut p = Perceptron::<IDIM>::new();
-        let norm = (p.weights.len() as f64).sqrt();
         let norm = (2.0 / (1 + p.weights.len()) as f64).sqrt();
         p.weights
             .iter_mut()
@@ -86,9 +82,7 @@ fn mlp(dist: f64) {
     let mse_thres = 1e-3;
     let mut err = Vec::new();
 
-    //let lr = |ep: usize| -> f64 { 1e-2 / (10.0 + ep as f64) };
-    //let lr = |ep: usize| -> f64 { 1e-3 };
-    const MAX_EPOCHS: usize = 500;
+    const MAX_EPOCHS: usize = 50;
     for ep in 0..MAX_EPOCHS {
         let mut hd = vec![0.0; hlayer.len() + 1];
         hd[hlayer.len()] = 1.0; // bias
