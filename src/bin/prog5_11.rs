@@ -165,4 +165,16 @@ fn main() {
     println!("{model}");
     model.eval(&trdata, &trlabels, "Errors - Training data:");
     model.eval(&tedata, &telabels, "Errors - Test data:");
+
+    let data: Vec<_> = tedata
+        .into_iter()
+        .map(|[x, y]| [1.0, x, y]) // Add 1.0 - gives the perceptron a bias term
+        .collect();
+
+    let rbf_model = |input: &[f64; 3]| {
+        let mut inp = [0.0f64; 2];
+        inp.copy_from_slice(&input[1..]);
+        model.output(&inp)
+    };
+    plot_mesh(&data, rbf_model, &title);
 }

@@ -38,6 +38,8 @@ Options:
 
 ![PNG](https://raw.githubusercontent.com/jesper-olsen/nnlm/refs/heads/master/Assets/prog5_11_kernels.png)
 
+![PNG](https://raw.githubusercontent.com/jesper-olsen/nnlm/refs/heads/master/Assets/prog5_11_classification_regions.png)
+
 ```
 [2024-11-06T09:40:03Z INFO  nnlm::gmm] EM training - ep: 0; #kernels: 20; cdist: 291.65
 [2024-11-06T09:40:03Z INFO  nnlm::gmm] EM training - ep: 1; #kernels: 20; cdist:  7.08

@@ -146,7 +146,7 @@ pub fn plot(data: &[[f64; 3]], weights: &[f64], title: &str) {
         .map(|(_, y, _)| *y)
         .collect();
 
-    // calcualte decision boundary
+    // calculate decision boundary
     let x_vals: Vec<f64> = (0..=100)
         .map(|i| xmin + (xmax - xmin) * (i as f64 / 100.0))
         .collect();
@@ -225,15 +225,6 @@ where
         .filter(|(_, _, z)| *z == -1)
         .map(|(_, y, _)| *y)
         .collect();
-
-    // calcualte decision boundary
-    // let x_vals: Vec<f64> = (0..=100)
-    //     .map(|i| xmin + (xmax - xmin) * (i as f64 / 100.0))
-    //     .collect();
-    // let y_vals: Vec<f64> = x_vals
-    //     .iter()
-    //     .map(|&x| -(weights[0] + weights[1] * x) / weights[2])
-    //     .collect();
 
     let vx: Vec<f64> = data.iter().map(|v| v[1]).collect();
     let vy: Vec<f64> = data.iter().map(|v| v[2]).collect();

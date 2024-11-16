@@ -60,6 +60,9 @@ fn least_squares(dist: f64, mu: f64) {
         "Least Squares Classification with Half-Moon Data - dist: {dist}; L2-reg: {mu}; Error: {error:.1}%"
     );
     plot(&data[NTRAIN..], &weights, &title);
+
+    //let p_model = |input: &[f64; 3]| input[1] * w[0] + input[2] * w[1];
+    //plot_mesh(&data[NTRAIN..], p_model, &title);
 }
 
 fn main() {

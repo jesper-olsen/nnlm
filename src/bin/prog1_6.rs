@@ -34,5 +34,8 @@ fn main() {
             "Perceptron Classification with Half-Moon Data - dist: {dist}; Error: {error:.1}%"
         );
         plot(&te_data, &model.weights, &title);
+
+        //let p_model = |input: &[f64; 3]| model.output(input);
+        //plot_mesh(&te_data, p_model, &title);
     }
 }
