@@ -176,5 +176,6 @@ fn main() {
         inp.copy_from_slice(&input[1..]);
         model.output(&inp)
     };
+    let title = format!("RBF decision boundaries for dist: {dist}");
     plot_mesh(&data, rbf_model, &title);
 }
