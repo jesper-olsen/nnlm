@@ -1,4 +1,5 @@
 use gnuplot::{AxesCommon, Figure};
+use nnlm::perceptron::Perceptron;
 use nnlm::*;
 
 fn plot_mse(mse: &[f64], title: &str) {

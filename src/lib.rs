@@ -1,8 +1,9 @@
 use gnuplot::{AxesCommon, Color, Figure, PointSymbol};
 //use rand::Rng;
 use stmc_rs::marsaglia::Marsaglia;
-pub mod kernel;
 pub mod gmm;
+pub mod kernel;
+pub mod perceptron;
 pub mod rbf;
 
 /// Halfmoons: randomly samples two "half moons". Returns samples and their labels. Samples are 3D:
@@ -41,50 +42,38 @@ pub fn halfmoons<const NSAMP: usize>(
     (data, labels)
 }
 
-pub struct Perceptron<const N: usize> {
-    pub weights: [f64; N],
+pub fn calc_mean(data: &[[f64; 2]]) -> Vec<f64> {
+    let mean: Vec<f64> = data.iter().fold(vec![0.0; 3], |acc, x| {
+        acc.iter().zip(x.iter()).map(|(a, b)| a + b).collect()
+    });
+    mean.iter().map(|x| x / data.len() as f64).collect()
 }
 
-impl<const N: usize> Perceptron<N> {
-    pub fn new() -> Self {
-        Self {
-            weights: [0.0; N], // including bias
+pub fn normalise_mean(data: &mut [[f64; 2]], mean: &[f64]) {
+    for sample in data {
+        for (value, &mean_val) in sample.iter_mut().zip(mean.iter()) {
+            *value -= mean_val;
         }
     }
+}
 
-    pub fn train(&mut self, data: &[[f64; N]], labels: &[i8]) -> f64 {
-        assert_eq!(data.len(), labels.len());
-
-        let mut ee = 0.0;
-        for (x, &d) in data.iter().zip(labels.iter()) {
-            let y = self
-                .weights
-                .iter()
-                .zip(x.iter())
-                .map(|(wi, xi)| wi * xi)
-                .sum::<f64>()
-                .signum();
-            let error = d as f64 - y;
-            for (wj, xj) in self.weights.iter_mut().zip(x.iter()) {
-                let lr = 1.0; // Optionally impl annealing, e.g. linear decay
-                *wj += lr * error * xj;
-            }
-            ee += error * error;
-        }
-        ee /= data.len() as f64;
-        ee
-    }
-
-    pub fn output(&self, x: &[f64]) -> f64 {
-        self.weights
-            .iter()
+pub fn calc_max(data: &[[f64; 2]]) -> Vec<f64> {
+    data.iter().fold(vec![0.0; 2], |acc, x| {
+        acc.iter()
             .zip(x.iter())
-            .map(|(wi, xi)| wi * xi)
-            .sum::<f64>()
-    }
+            .map(|(a, b)| a.max(b.abs()))
+            .collect()
+    })
+}
 
-    pub fn classify(&self, x: &[f64]) -> i8 {
-        self.output(x).signum() as i8
+pub fn normalise_max(data: &mut [[f64; 2]], max_vals: &[f64]) {
+    const EPSILON: f64 = 1e-10;
+    for sample in data {
+        for (value, &max_val) in sample.iter_mut().zip(max_vals.iter()) {
+            if max_val > EPSILON {
+                *value /= max_val
+            }
+        }
     }
 }
 
