@@ -27,12 +27,18 @@ fn act(x: f64) -> f64 {
 //     x.max(0.0)
 // }
 
-fn mlp_output(hlayer: &[Perceptron<IDIM>], olayer: &Perceptron<21>, x: &[f64; IDIM]) -> f64 {
-    let hd: Vec<f64> = hlayer
+fn layer_output(hlayer: &[Perceptron<IDIM>], hd: &mut [f64], x: &[f64; IDIM]) {
+    debug_assert_eq!(hlayer.len() + 1, hd.len());
+    hlayer
         .iter()
-        .map(|node| act(node.output(x)))
-        .chain(std::iter::once(1.0)) // bias
-        .collect();
+        .zip(hd.iter_mut())
+        .for_each(|(n, o)| *o = act(n.output(x)));
+}
+
+fn mlp_output(hlayer: &[Perceptron<IDIM>], olayer: &Perceptron<21>, x: &[f64; IDIM]) -> f64 {
+    let mut hd = vec![0.0f64; hlayer.len() + 1];
+    hd[hlayer.len()] = 1.0; // bias
+    layer_output(hlayer, &mut hd, x);
     act(olayer.output(&hd))
 }
 
@@ -78,20 +84,18 @@ fn mlp(dist: f64) {
         .iter_mut()
         //.for_each(|w| *w = rng.uni() / 2.0 - 0.25);
         .for_each(|w| *w = rng.gauss() * norm);
+    let mut hd = vec![0.0f64; hlayer.len() + 1];
+    hd[hlayer.len()] = 1.0; // bias
 
     let mse_thres = 1e-3;
     let mut err = Vec::new();
 
     const MAX_EPOCHS: usize = 50;
     for ep in 0..MAX_EPOCHS {
-        let mut hd = vec![0.0; hlayer.len() + 1];
-        hd[hlayer.len()] = 1.0; // bias
         let mut mse = 0.0;
         for (i, x) in data[..NTRAIN].iter().enumerate() {
             // Forward pass
-            for z in 0..hlayer.len() {
-                hd[z] = act(hlayer[z].output(x));
-            }
+            layer_output(&hlayer, &mut hd, x);
             let o = act(olayer.output(&hd));
             let e = o - labels[i] as f64;
             mse += e * e;
