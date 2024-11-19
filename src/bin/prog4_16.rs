@@ -16,23 +16,23 @@ fn act(x: f64) -> f64 {
     (2.0 * x).tanh()
 }
 
-fn relu(x: f64) -> f64 {
-    if x > 0.0 {
-        1.0
-    } else {
-        0.0
-    }
-}
-fn drelu(x: f64) -> f64 {
-    x.max(0.0)
-}
+// fn relu(x: f64) -> f64 {
+//     if x > 0.0 {
+//         1.0
+//     } else {
+//         0.0
+//     }
+// }
+// fn drelu(x: f64) -> f64 {
+//     x.max(0.0)
+// }
 
 fn mlp_output(hlayer: &[Perceptron<IDIM>], olayer: &Perceptron<21>, x: &[f64; IDIM]) -> f64 {
-    let mut hd = vec![0.0; hlayer.len() + 1];
-    hd[hlayer.len()] = 1.0; // bias
-    for i in 0..hlayer.len() {
-        hd[i] = act(hlayer[i].output(x));
-    }
+    let hd: Vec<f64> = hlayer
+        .iter()
+        .map(|node| act(node.output(x)))
+        .chain(std::iter::once(1.0)) // bias
+        .collect();
     act(olayer.output(&hd))
 }
 

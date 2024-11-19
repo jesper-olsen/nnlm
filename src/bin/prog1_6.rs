@@ -1,4 +1,3 @@
-use gnuplot::{AxesCommon, Figure};
 use nnlm::perceptron::Perceptron;
 use nnlm::*;
 
