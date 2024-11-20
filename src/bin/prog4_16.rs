@@ -1,5 +1,6 @@
 use nnlm::perceptron::Perceptron;
 use nnlm::*;
+use std::array;
 use stmc_rs::marsaglia::Marsaglia;
 use ActivationFunction::*;
 
@@ -69,18 +70,17 @@ fn mlp(dist: f64) {
         .collect();
 
     let mut rng = Marsaglia::new(12, 34, 56, 78);
-    let mut hlayer = Vec::new();
-    for _ in 0..20 {
+    let mut hlayer: [Perceptron<IDIM>; 20] = array::from_fn(|_| {
         let mut p = Perceptron::<IDIM>::new();
-        let norm = (2.0 / (1 + p.weights.len()) as f64).sqrt();
+        let norm = (2.0 / p.weights.len() as f64).sqrt();
         p.weights
             .iter_mut()
             //.for_each(|w| *w = rng.uni() / 2.0 - 0.25);
             .for_each(|w| *w = rng.gauss() * norm);
-        hlayer.push(p);
-    }
+        p
+    });
     let mut olayer = Perceptron::<21>::new();
-    let norm = (2.0 / (21.0f64)).sqrt();
+    let norm = (2.0 / 21.0f64).sqrt();
     olayer
         .weights
         .iter_mut()
