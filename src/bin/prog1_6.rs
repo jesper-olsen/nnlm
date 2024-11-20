@@ -15,7 +15,7 @@ fn main() {
         let tr_labels = &labels[..1000];
         let te_data = &data[1000..];
         let te_labels = &labels[1000..];
-        let mut model = Perceptron::<3>::new();
+        let mut model = Perceptron::<3>::default();
         let mse: Vec<f64> = (0..NEPOCHS)
             .map(|_| model.train(tr_data, tr_labels))
             .collect();

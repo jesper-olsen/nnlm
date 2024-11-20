@@ -66,7 +66,7 @@ impl<const IDIM: usize> GKernel<IDIM> {
             .for_each(|(x, y)| *x = y + rng.uni() * 0.001);
         GKernel {
             mean: s,
-            var: self.var.clone(),
+            var: self.var,
         }
     }
 

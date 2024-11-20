@@ -1,31 +1,33 @@
 use nnlm::perceptron::Perceptron;
 use nnlm::*;
 use stmc_rs::marsaglia::Marsaglia;
+use ActivationFunction::*;
+
+enum ActivationFunction {
+    ReLU,
+    Tanhx,
+    Tanh2x,
+}
 
 const IDIM: usize = 3;
+const ACTIVATION_FUNCTION: ActivationFunction = Tanh2x;
 
 fn dact(x: f64) -> f64 {
-    //drelu(x)   // ReLU
-    //1.0 - x.tanh().powi(2)  // tanh(x)
-    2.0 - 2.0 * (2.0 * x).tanh().powi(2) // tanh(2x)
+    match ACTIVATION_FUNCTION {
+        ReLU => x.max(0.0),
+        Tanhx => 1.0 - x.tanh().powi(2),
+        Tanh2x => 2.0 - 2.0 * (2.0 * x).tanh().powi(2),
+    }
 }
 
 fn act(x: f64) -> f64 {
-    //relu(x)        // does not work well on halfmoons
-    //x.tanh()
-    (2.0 * x).tanh()
+    match ACTIVATION_FUNCTION {
+        ReLU if x > 0.0 => 1.0,
+        ReLU => 0.0,
+        Tanhx => x.tanh(),
+        Tanh2x => (2.0 * x).tanh(),
+    }
 }
-
-// fn relu(x: f64) -> f64 {
-//     if x > 0.0 {
-//         1.0
-//     } else {
-//         0.0
-//     }
-// }
-// fn drelu(x: f64) -> f64 {
-//     x.max(0.0)
-// }
 
 fn layer_output(hlayer: &[Perceptron<IDIM>], hd: &mut [f64], x: &[f64; IDIM]) {
     debug_assert_eq!(hlayer.len() + 1, hd.len());

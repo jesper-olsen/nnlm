@@ -289,7 +289,7 @@ impl<const IDIM: usize> GMM<IDIM> {
     }
 
     /// distance betwen old and new kernel estimates
-    fn check_convergence(&self, new_kernels: &Vec<GKernel<IDIM>>) -> f64 {
+    fn check_convergence(&self, new_kernels: &[GKernel<IDIM>]) -> f64 {
         self.kernels
             .iter()
             .zip(new_kernels.iter())

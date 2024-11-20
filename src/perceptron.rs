@@ -5,6 +5,14 @@ pub struct Perceptron<const IDIM: usize> {
     pub weights: [f64; IDIM],
 }
 
+impl<const IDIM: usize> Default for Perceptron<IDIM> {
+    fn default() -> Self {
+        Self {
+            weights: [0.0; IDIM], // bias included if any
+        }
+    }
+}
+
 impl<const IDIM: usize> fmt::Display for Perceptron<IDIM> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f, "Perceptron")?;
