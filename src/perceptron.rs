@@ -1,6 +1,7 @@
+use std::array;
 use std::fmt;
+use stmc_rs::marsaglia::Marsaglia;
 
-//#[derive(Clone, Copy)]
 pub struct Perceptron<const IDIM: usize> {
     pub weights: [f64; IDIM],
 }
@@ -8,7 +9,7 @@ pub struct Perceptron<const IDIM: usize> {
 impl<const IDIM: usize> Default for Perceptron<IDIM> {
     fn default() -> Self {
         Self {
-            weights: [0.0; IDIM], // bias included if any
+            weights: array::from_fn(|_| 0.0), // bias included if any
         }
     }
 }
@@ -27,9 +28,10 @@ impl<const IDIM: usize> fmt::Display for Perceptron<IDIM> {
 }
 
 impl<const IDIM: usize> Perceptron<IDIM> {
-    pub fn new() -> Self {
+    pub fn new(rng: &mut Marsaglia) -> Self {
+        let norm = (2.0 / IDIM as f64).sqrt();
         Self {
-            weights: [0.0; IDIM], // including bias
+            weights: array::from_fn(|_| rng.gauss() * norm),
         }
     }
 
