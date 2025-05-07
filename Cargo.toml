@@ -1,14 +1,13 @@
 [package]
 name = "nnlm"
 version = "0.1.0"
-edition = "2021"
+edition = "2024"
 
 [dependencies]
 stmc_rs = { git = "https://github.com/jesper-olsen/stmc-rs", branch = "master" }
-gnuplot = "0.0.43"
-nalgebra = "0.33.0"
-osqp = "0.6.2"
-clap = { version = "4.5.20", features = ["derive"] }
-log = "0.4.22"
-env_logger = "0.11.5"
+nalgebra = "0.33.2"
+gnuplot = "0.0.46"
+clap = { version = "4.5.37", features = ["derive"] }
+log = "0.4.27"
+env_logger = "0.11.8"
 

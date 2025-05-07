@@ -87,7 +87,7 @@ pub fn plot_mse(mse: &[f64], title: &str) {
         .lines(
             &epochs,
             mse,
-            &[gnuplot::Caption("MSE"), gnuplot::Color("black")],
+            &[gnuplot::Caption("MSE"), gnuplot::Color(gnuplot::RGBString("black"))],
         );
     fg.show().unwrap();
 }
@@ -161,10 +161,10 @@ pub fn plot(data: &[[f64; 3]], weights: &[f64], title: &str) {
     let mut fg = Figure::new();
     fg.axes2d()
         .set_title(title, &[])
-        .points(&vx, &vy, &[PointSymbol('O'), Color("blue")]) // Original data points
-        .points(&pos_x, &pos_y, &[PointSymbol('.'), Color("green")]) // Positive classified points
-        .points(&neg_x, &neg_y, &[PointSymbol('.'), Color("red")]) // Negative classified points
-        .lines(&x_vals, &y_vals, &[Color("black")]);
+        .points(&vx, &vy, &[PointSymbol('O'), Color(gnuplot::RGBString("blue"))]) // Original data points
+        .points(&pos_x, &pos_y, &[PointSymbol('.'), Color(gnuplot::RGBString("green"))]) // Positive classified points
+        .points(&neg_x, &neg_y, &[PointSymbol('.'), Color(gnuplot::RGBString("red"))]) // Negative classified points
+        .lines(&x_vals, &y_vals, &[Color(gnuplot::RGBString("black"))]);
     fg.show().unwrap();
 }
 
@@ -232,9 +232,9 @@ where
     let mut fg = Figure::new();
     fg.axes2d()
         .set_title(title, &[])
-        .points(&vx, &vy, &[PointSymbol('O'), Color("blue")]) // Original data points
-        .points(&pos_x, &pos_y, &[PointSymbol('.'), Color("green")]) // Positive classified points
-        .points(&neg_x, &neg_y, &[PointSymbol('.'), Color("red")]); // Negative classified points
+        .points(&vx, &vy, &[PointSymbol('O'), Color(gnuplot::RGBString("blue"))]) // Original data points
+        .points(&pos_x, &pos_y, &[PointSymbol('.'), Color(gnuplot::RGBString("green"))]) // Positive classified points
+        .points(&neg_x, &neg_y, &[PointSymbol('.'), Color(gnuplot::RGBString("red"))]); // Negative classified points
                                                                     //.lines(&x_vals, &y_vals, &[Color("black")]);
     fg.show().unwrap();
 }

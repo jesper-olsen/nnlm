@@ -59,19 +59,27 @@ fn plot_rbf(
         .points(
             &x_pos,
             &y_pos,
-            &[Caption("Class 1"), Color("red"), gnuplot::PointSize(2.0)],
+            &[
+                Caption("Class 1"),
+                Color(gnuplot::RGBString("red")),
+                gnuplot::PointSize(2.0),
+            ],
         )
         .points(
             &x_neg,
             &y_neg,
-            &[Caption("Class -1"), Color("green"), gnuplot::PointSize(2.0)],
+            &[
+                Caption("Class -1"),
+                Color(gnuplot::RGBString("green")),
+                gnuplot::PointSize(2.0),
+            ],
         )
         .points(
             &x_c,
             &y_c,
             &[
                 Caption("RBF Centers"),
-                Color("black"),
+                Color(gnuplot::RGBString("black")),
                 gnuplot::PointSize(4.0),
             ],
         )
@@ -95,7 +103,11 @@ fn plot_rbf(
         axes.lines(
             &ellipse_x,
             &ellipse_y,
-            &[Color("black"), LineWidth(1.0), LineStyle(Solid)],
+            &[
+                Color(gnuplot::RGBString("black")),
+                LineWidth(1.0),
+                LineStyle(Solid),
+            ],
         );
     }
 
